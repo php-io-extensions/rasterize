@@ -1,0 +1,52 @@
+{
+    "name": "php-io-extensions/rasterize",
+    "type": "php-ext",
+    "description": "Shapes into coverage spans in C: RasterScanner answers paths, ellipses, rings and one-pixel polylines as span bytes, hard-edged or anti-aliased",
+    "keywords": [
+        "rasterize",
+        "scanline",
+        "antialiasing",
+        "spans",
+        "php-ext"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Project Saturn Studios, LLC",
+            "email": "info@projectsaturnstudios.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.4"
+    },
+    "require-dev": {
+        "pestphp/pest": "^4.0"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.10.x-dev"
+        }
+    },
+    "php-ext": {
+        "extension-name": "rasterize",
+        "priority": 30,
+        "support-zts": true,
+        "support-nts": true,
+        "os-families": [
+            "linux",
+            "darwin"
+        ],
+        "configure-options": [
+            {
+                "name": "enable-rasterize",
+                "description": "Enable the rasterize extension",
+                "needs-value": false
+            }
+        ]
+    }
+}
