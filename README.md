@@ -1,5 +1,7 @@
 # ext-rasterize
 
+[![CI](https://img.shields.io/github/actions/workflow/status/php-io-extensions/rasterize/ci.yml?style=flat-square&label=CI)](https://github.com/php-io-extensions/rasterize/actions/workflows/ci.yml)
+
 Shapes into coverage spans in C. `RasterScanner` holds a clip and an edge mode
 and answers paths, ellipses, rings and one-pixel polylines as span bytes, ready
 for a pixel store to paint. Geometry only: it never touches a pixel. Written
