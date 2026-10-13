@@ -46,7 +46,7 @@ it('exposes every constant, class and method the stubs declare', function (): vo
 });
 
 it('reports its version', function (): void {
-    expect(phpversion('rasterize'))->toBe('0.10.0');
+    expect(phpversion('rasterize'))->toBe('0.10.5');
 });
 
 it('declares a final class that cannot be cloned or serialized', function (): void {
