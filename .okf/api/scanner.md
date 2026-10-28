@@ -51,7 +51,7 @@ Pixel `(x, y)` covers `[x, x+1) × [y, y+1)`.
 * Ellipse at line `y`: `t = (y − cy) / ry`, `h = rx × sqrt(1 − t²)` when `1 − t² > 0`, interval `[cx − h, cx + h)`.
 * One-pixel line: along the major axis from the lower end, minor offset `floor((2·|d_minor|·i + |d_major|) / (2·|d_major|))`; only the clipped stretch is walked, so far-off endpoints cost nothing.
 
-Arithmetic: IEEE double, `+ − × ÷ sqrt floor ceil`, fixed order, `-ffp-contract=off` (without it clang fuses seven multiply-adds in `core.c`, `1 − t²` among them). A PHP implementation in the same order answers the same bytes; Surface's native scanner is one.
+Arithmetic: IEEE double, `+ − × ÷ sqrt floor ceil`, fixed order, `-ffp-contract=off` (without it clang fuses seven multiply-adds in `core.c`, `1 − t²` among them). A PHP implementation in the same order answers the same bytes.
 
 [^stubs]: The stubs are the declaration of record; arginfo is generated from them.
 [^core]: `core.h` documents the span bytes and the memory hooks.
