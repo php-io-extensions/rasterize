@@ -31,6 +31,23 @@ final class RasterScanner
     public function ring(float $cx, float $cy, float $rx, float $ry, float $stroke): string {}
 
     /**
+     * A box [x0, x1) × [y0, y1) with each corner cut by a quarter circle.
+     *
+     * @param array $radii [tl, tr, br, bl]: four numbers, already held to 0..min(w, h)/2.
+     */
+    public function roundRect(float $x0, float $y0, float $x1, float $y1, array $radii): string {}
+
+    /**
+     * The band between the box and the box inset by $inset, whose radii are max(0, r - inset); the whole box when the inset box is empty.
+     *
+     * @param array $radii [tl, tr, br, bl]: four numbers, already held.
+     */
+    public function roundRing(float $x0, float $y0, float $x1, float $y1, array $radii, float $inset): string {}
+
+    /** Coverage 1 - smoothstep(-blur, blur, d) at each pixel centre, d the signed distance to the box rounded by $radius; hard edges keep coverage >= 128 at 255. A blur of 0 is the hard box. */
+    public function shadow(float $x0, float $y0, float $x1, float $y1, float $radius, float $blur): string {}
+
+    /**
      * One-pixel lines between the floored points, every pixel once, coverage 255 whatever the edge mode.
      *
      * @param array $points A flat list x, y, x, y… of numbers.

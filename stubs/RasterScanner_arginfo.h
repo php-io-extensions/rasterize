@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: fe5a2447c8471055c60b2406961dae48a204ef60 */
+ * Stub hash: f936e1b4eafbdad362b9767f36f141e0de9fa757 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_RasterScanner___construct, 0, 0, 5)
 	ZEND_ARG_TYPE_INFO(0, x, IS_LONG, 0)
@@ -35,6 +35,32 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_RasterScanner_ring, 0, 5, 
 	ZEND_ARG_TYPE_INFO(0, stroke, IS_DOUBLE, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_RasterScanner_roundRect, 0, 5, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, x0, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, y0, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, x1, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, y1, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, radii, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_RasterScanner_roundRing, 0, 6, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, x0, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, y0, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, x1, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, y1, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, radii, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, inset, IS_DOUBLE, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_RasterScanner_shadow, 0, 6, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, x0, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, y0, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, x1, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, y1, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, radius, IS_DOUBLE, 0)
+	ZEND_ARG_TYPE_INFO(0, blur, IS_DOUBLE, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_RasterScanner_polyline, 0, 1, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, points, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, closed, _IS_BOOL, 0, "false")
@@ -46,6 +72,9 @@ ZEND_METHOD(RasterScanner, antialias);
 ZEND_METHOD(RasterScanner, path);
 ZEND_METHOD(RasterScanner, ellipse);
 ZEND_METHOD(RasterScanner, ring);
+ZEND_METHOD(RasterScanner, roundRect);
+ZEND_METHOD(RasterScanner, roundRing);
+ZEND_METHOD(RasterScanner, shadow);
 ZEND_METHOD(RasterScanner, polyline);
 
 static const zend_function_entry class_RasterScanner_methods[] = {
@@ -55,6 +84,9 @@ static const zend_function_entry class_RasterScanner_methods[] = {
 	ZEND_ME(RasterScanner, path, arginfo_class_RasterScanner_path, ZEND_ACC_PUBLIC)
 	ZEND_ME(RasterScanner, ellipse, arginfo_class_RasterScanner_ellipse, ZEND_ACC_PUBLIC)
 	ZEND_ME(RasterScanner, ring, arginfo_class_RasterScanner_ring, ZEND_ACC_PUBLIC)
+	ZEND_ME(RasterScanner, roundRect, arginfo_class_RasterScanner_roundRect, ZEND_ACC_PUBLIC)
+	ZEND_ME(RasterScanner, roundRing, arginfo_class_RasterScanner_roundRing, ZEND_ACC_PUBLIC)
+	ZEND_ME(RasterScanner, shadow, arginfo_class_RasterScanner_shadow, ZEND_ACC_PUBLIC)
 	ZEND_ME(RasterScanner, polyline, arginfo_class_RasterScanner_polyline, ZEND_ACC_PUBLIC)
 	ZEND_FE_END
 };

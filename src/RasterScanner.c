@@ -286,3 +286,107 @@ ZEND_METHOD(RasterScanner, polyline)
 	efree(points);
 	phpraster_return(return_value, &spans);
 }
+
+/* Four numbers, each finite within RASTER_LIMIT; otherwise a ValueError. */
+static bool phpraster_radii(HashTable *list, double radii[4])
+{
+	zval *entry;
+	int i = 0;
+
+	if (!zend_array_is_list(list) || zend_hash_num_elements(list) != 4) {
+		zend_value_error("Radii are a list of four numbers: [tl, tr, br, bl].");
+		return false;
+	}
+	ZEND_HASH_FOREACH_VAL(list, entry) {
+		ZVAL_DEREF(entry);
+		if (Z_TYPE_P(entry) == IS_LONG) {
+			radii[i] = (double) Z_LVAL_P(entry);
+		} else if (Z_TYPE_P(entry) == IS_DOUBLE) {
+			radii[i] = Z_DVAL_P(entry);
+		} else {
+			zend_value_error("Radii are a list of four numbers: [tl, tr, br, bl].");
+			return false;
+		}
+		if (!phpraster_number(radii[i], "A radius")) {
+			return false;
+		}
+		i++;
+	} ZEND_HASH_FOREACH_END();
+
+	return true;
+}
+
+static bool phpraster_box(double x0, double y0, double x1, double y1)
+{
+	return phpraster_number(x0, "x0") && phpraster_number(y0, "y0") && phpraster_number(x1, "x1") && phpraster_number(y1, "y1");
+}
+
+ZEND_METHOD(RasterScanner, roundRect)
+{
+	double x0, y0, x1, y1, radii[4];
+	HashTable *list;
+
+	ZEND_PARSE_PARAMETERS_START(5, 5)
+		Z_PARAM_DOUBLE(x0)
+		Z_PARAM_DOUBLE(y0)
+		Z_PARAM_DOUBLE(x1)
+		Z_PARAM_DOUBLE(y1)
+		Z_PARAM_ARRAY_HT(list)
+	ZEND_PARSE_PARAMETERS_END();
+	PHPRASTER_THIS(self);
+
+	if (!phpraster_box(x0, y0, x1, y1) || !phpraster_radii(list, radii)) {
+		RETURN_THROWS();
+	}
+
+	raster_spans spans = {NULL, 0, 0};
+	raster_round_rect(&self->scan, x0, y0, x1, y1, radii, &spans);
+	phpraster_return(return_value, &spans);
+}
+
+ZEND_METHOD(RasterScanner, roundRing)
+{
+	double x0, y0, x1, y1, inset, radii[4];
+	HashTable *list;
+
+	ZEND_PARSE_PARAMETERS_START(6, 6)
+		Z_PARAM_DOUBLE(x0)
+		Z_PARAM_DOUBLE(y0)
+		Z_PARAM_DOUBLE(x1)
+		Z_PARAM_DOUBLE(y1)
+		Z_PARAM_ARRAY_HT(list)
+		Z_PARAM_DOUBLE(inset)
+	ZEND_PARSE_PARAMETERS_END();
+	PHPRASTER_THIS(self);
+
+	if (!phpraster_box(x0, y0, x1, y1) || !phpraster_number(inset, "inset") || !phpraster_radii(list, radii)) {
+		RETURN_THROWS();
+	}
+
+	raster_spans spans = {NULL, 0, 0};
+	raster_round_ring(&self->scan, x0, y0, x1, y1, radii, inset, &spans);
+	phpraster_return(return_value, &spans);
+}
+
+ZEND_METHOD(RasterScanner, shadow)
+{
+	double x0, y0, x1, y1, radius, blur;
+
+	ZEND_PARSE_PARAMETERS_START(6, 6)
+		Z_PARAM_DOUBLE(x0)
+		Z_PARAM_DOUBLE(y0)
+		Z_PARAM_DOUBLE(x1)
+		Z_PARAM_DOUBLE(y1)
+		Z_PARAM_DOUBLE(radius)
+		Z_PARAM_DOUBLE(blur)
+	ZEND_PARSE_PARAMETERS_END();
+	PHPRASTER_THIS(self);
+
+	if (!phpraster_box(x0, y0, x1, y1) || !phpraster_number(radius, "radius") || !phpraster_number(blur, "blur")) {
+		RETURN_THROWS();
+	}
+
+	raster_spans spans = {NULL, 0, 0};
+	raster_shadow(&self->scan, x0, y0, x1, y1, radius, blur, &spans);
+	phpraster_return(return_value, &spans);
+}

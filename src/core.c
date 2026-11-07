@@ -376,6 +376,223 @@ void raster_ring(const raster_scan *scan, double cx, double cy, double rx, doubl
 	raster_scan_rows(scan, raster_ring_at, &e, out);
 }
 
+/* Rounded rects, rounded rings and shadows: NativeScanner's steps, in its order ------------- */
+
+typedef struct {
+	double x0, y0, x1, y1;
+	double r[4];
+	double ix0, iy0, ix1, iy1;
+	double ir[4];
+	int hollow;
+} raster_round_shape;
+
+/* One end on a quarter circle of radius r centred (cx, cy): cx + side * r * sqrt(max(0, 1 - t^2)). */
+static double raster_corner(double cx, double cy, double r, double y, int side)
+{
+	double t = (y - cy) / r;
+	double s = 1.0 - t * t;
+
+	if (s < 0) {
+		s = 0.0;
+	}
+	double h = r * sqrt(s);
+
+	return side < 0 ? cx - h : cx + h;
+}
+
+/*
+ * Where line y crosses a rounded box: [left, right). Written as raster_across() writes the ellipse, so a
+ * box that is a circle answers the ellipse's bytes.
+ */
+static int raster_round_across(double x0, double y0, double x1, double y1, const double r[4], double y, double *a, double *b)
+{
+	/* 1. outside the box: nothing */
+	if (y < y0 || y >= y1) {
+		return 0;
+	}
+
+	/* 2. the left end: tl above its band, bl below its band */
+	double left = x0;
+	if (y < y0 + r[0]) {
+		left = raster_corner(x0 + r[0], y0 + r[0], r[0], y, -1);
+	} else if (y > y1 - r[3]) {
+		left = raster_corner(x0 + r[3], y1 - r[3], r[3], y, -1);
+	}
+
+	/* 3. the right end: tr above its band, br below its band */
+	double right = x1;
+	if (y < y0 + r[1]) {
+		right = raster_corner(x1 - r[1], y0 + r[1], r[1], y, 1);
+	} else if (y > y1 - r[2]) {
+		right = raster_corner(x1 - r[2], y1 - r[2], r[2], y, 1);
+	}
+
+	/* 4. an empty interval is none */
+	if (!(right > left)) {
+		return 0;
+	}
+	*a = left;
+	*b = right;
+
+	return 1;
+}
+
+static void raster_round_rect_at(void *shape, double y, raster_intervals *intervals, const raster_memory *memory)
+{
+	const raster_round_shape *q = shape;
+	double a, b;
+
+	if (raster_round_across(q->x0, q->y0, q->x1, q->y1, q->r, y, &a, &b)) {
+		raster_interval(intervals, memory, a, b);
+	}
+}
+
+static void raster_round_ring_at(void *shape, double y, raster_intervals *intervals, const raster_memory *memory)
+{
+	const raster_round_shape *q = shape;
+	double oa, ob, ia, ib;
+
+	/* 3. a line: the outer interval, less the inner one when the line crosses it */
+	if (!raster_round_across(q->x0, q->y0, q->x1, q->y1, q->r, y, &oa, &ob)) {
+		return;
+	}
+	if (!q->hollow || !raster_round_across(q->ix0, q->iy0, q->ix1, q->iy1, q->ir, y, &ia, &ib)) {
+		raster_interval(intervals, memory, oa, ob);
+		return;
+	}
+	raster_interval(intervals, memory, oa, ia);
+	raster_interval(intervals, memory, ib, ob);
+}
+
+void raster_round_rect(const raster_scan *scan, double x0, double y0, double x1, double y1, const double radii[4], raster_spans *out)
+{
+	raster_round_shape q = {x0, y0, x1, y1, {radii[0], radii[1], radii[2], radii[3]}, 0, 0, 0, 0, {0, 0, 0, 0}, 0};
+
+	/* 1. the box and radii are checked by the caller */
+	if (x1 <= x0 || y1 <= y0) {
+		return;
+	}
+
+	/* 2. one interval a sample line */
+	raster_scan_rows(scan, raster_round_rect_at, &q, out);
+}
+
+static double raster_shrink(double r, double inset)
+{
+	double v = r - inset;
+
+	return v > 0.0 ? v : 0.0;
+}
+
+void raster_round_ring(const raster_scan *scan, double x0, double y0, double x1, double y1, const double radii[4], double inset, raster_spans *out)
+{
+	raster_round_shape q = {x0, y0, x1, y1, {radii[0], radii[1], radii[2], radii[3]}, 0, 0, 0, 0, {0, 0, 0, 0}, 0};
+
+	/* 1. the box, radii and inset are checked by the caller */
+	if (x1 <= x0 || y1 <= y0 || inset <= 0) {
+		return;
+	}
+
+	/* 2. the inset box and its radii, max(0, r - inset) */
+	q.ix0 = x0 + inset;
+	q.iy0 = y0 + inset;
+	q.ix1 = x1 - inset;
+	q.iy1 = y1 - inset;
+	for (int i = 0; i < 4; i++) {
+		q.ir[i] = raster_shrink(radii[i], inset);
+	}
+	q.hollow = q.ix1 > q.ix0 && q.iy1 > q.iy0;
+
+	raster_scan_rows(scan, raster_round_ring_at, &q, out);
+}
+
+/* Signed distance from (dx, dy), measured from the box centre, to the box of half sizes hx, hy rounded by r. */
+static double raster_round_distance(double dx, double dy, double hx, double hy, double r)
+{
+	double qx = fabs(dx) - hx + r;
+	double qy = fabs(dy) - hy + r;
+	double ox = qx > 0 ? qx : 0.0;
+	double oy = qy > 0 ? qy : 0.0;
+	double in = qx > qy ? qx : qy;
+
+	return (in < 0 ? in : 0.0) + sqrt(ox * ox + oy * oy) - r;
+}
+
+/* Coverage 0..255 at distance d: 1 - smoothstep(-blur, blur, d); a blur of 0 is in when d < 0. */
+static int raster_shade(double d, double blur, int hard)
+{
+	double c;
+
+	if (blur > 0) {
+		double t = raster_clamp((d + blur) / (2 * blur), 0.0, 1.0);
+		c = 1.0 - t * t * (3 - 2 * t);
+	} else {
+		c = d < 0 ? 1.0 : 0.0;
+	}
+	int v = (int) floor(c * 255 + 0.5);
+	if (hard) {
+		return v >= 128 ? 255 : 0;
+	}
+
+	return v;
+}
+
+void raster_shadow(const raster_scan *scan, double x0, double y0, double x1, double y1, double radius, double blur, raster_spans *out)
+{
+	/* 1. the box, radius and blur are checked by the caller */
+	if (x1 <= x0 || y1 <= y0) {
+		return;
+	}
+
+	/* 2. the pixels the blur can reach, cut to the clip */
+	int left = (int) raster_clamp(floor(x0 - blur), (double) scan->left, (double) scan->right);
+	int right = (int) raster_clamp(ceil(x1 + blur), (double) scan->left, (double) scan->right);
+	int top = (int) raster_clamp(floor(y0 - blur), (double) scan->top, (double) scan->bottom);
+	int bottom = (int) raster_clamp(ceil(y1 + blur), (double) scan->top, (double) scan->bottom);
+	if (right <= left || bottom <= top) {
+		return;
+	}
+
+	/* 3. the box as centre and half sizes */
+	double cx = (x0 + x1) / 2;
+	double cy = (y0 + y1) / 2;
+	double hx = (x1 - x0) / 2;
+	double hy = (y1 - y0) / 2;
+
+	/* 4. columns this far inside both sides see a distance that depends on y alone: one run (64-bit, as PHP's int) */
+	int64_t band = (int64_t) ceil(radius + blur) + 2;
+	int64_t middle_from = (int64_t) ceil(x0) + band;
+	int64_t middle_to = (int64_t) floor(x1) - band;
+	int hard = !scan->antialias;
+
+	/* 5. a row: runs of equal coverage, coverage 0 left out */
+	for (int row = top; row < bottom; row++) {
+		double py = (double) row + 0.5;
+		int start = left;
+		int value = -1;
+
+		for (int col = left; col < right; col++) {
+			int middle = col == middle_from && middle_to > middle_from;
+			double px = middle ? cx : (double) col + 0.5;
+			int v = raster_shade(raster_round_distance(px - cx, py - cy, hx, hy, radius), blur, hard);
+
+			if (v != value) {
+				if (value > 0) {
+					raster_emit(scan, out, row, start, col - start, value);
+				}
+				start = col;
+				value = v;
+			}
+			if (middle) {
+				col = (int) ((middle_to < right ? middle_to : right) - 1);
+			}
+		}
+		if (value > 0) {
+			raster_emit(scan, out, row, start, right - start, value);
+		}
+	}
+}
+
 /* One-pixel polylines ------------------------------------------------------------------------- */
 
 typedef struct {

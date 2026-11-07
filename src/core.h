@@ -51,6 +51,15 @@ void raster_path(const raster_scan *scan, const raster_contour *contours, size_t
 void raster_ellipse(const raster_scan *scan, double cx, double cy, double rx, double ry, raster_spans *out);
 /* The band between radii r + stroke / 2 and r - stroke / 2. */
 void raster_ring(const raster_scan *scan, double cx, double cy, double rx, double ry, double stroke, raster_spans *out);
+/* A box [x0, x1) x [y0, y1) with each corner cut by a quarter circle; radii [tl, tr, br, bl], already held to 0..min(w, h)/2. */
+void raster_round_rect(const raster_scan *scan, double x0, double y0, double x1, double y1, const double radii[4], raster_spans *out);
+/* The band between the box and the box inset by `inset`, whose radii are max(0, r - inset); the whole box when the inset box is empty. */
+void raster_round_ring(const raster_scan *scan, double x0, double y0, double x1, double y1, const double radii[4], double inset, raster_spans *out);
+/*
+ * Coverage 1 - smoothstep(-blur, blur, d) at each pixel centre, d the signed distance to the box rounded by
+ * `radius`; hard edges keep coverage >= 128 at 255. A blur of 0 or less is the hard box, in where d < 0.
+ */
+void raster_shadow(const raster_scan *scan, double x0, double y0, double x1, double y1, double radius, double blur, raster_spans *out);
 /* One-pixel lines between the floored points, every pixel once, coverage 255 whatever the edges. */
 void raster_polyline(const raster_scan *scan, const double *points, size_t count, int closed, raster_spans *out);
 

@@ -5,7 +5,7 @@ description: Scratch build with gen_stub, the two installers, Pest, the Pi loop.
 resource: install-macos.sh
 tags: [build, linux, macos, pest]
 status: draft
-generated: { by: claude-opus/5.5, at: 2026-10-03T22:56:49Z }
+generated: { by: claude-opus/5.5, at: 2026-11-05T00:00:00Z }
 sources:
   - id: mac
     resource: install-macos.sh
@@ -26,6 +26,8 @@ macOS (`install-macos.sh`): builds in a temp copy for php@8.4 and php@8.4-zts, a
 Linux (`install-debian-trixie.sh`): builds in place, installs `rasterize.so`, writes `30-rasterize.ini`, removes build output.[^debian]
 
 Pi from the Mac: tree on the Mac is authoritative, Pi copy disposable. `COPYFILE_DISABLE=1 tar --no-mac-metadata --exclude .git -czf - -C <ext> . | fnk 'tar -xzf - -C ~/rz'`, install, Pest, `rm -rf ~/rz`. Without `--no-mac-metadata` the copy carries `._*` files that gen_stub trips on.
+
+Gaming PC from the Mac (through the `gamingpc` alias): a stdin pipe into the alias does not work from a script, so build a tar file and redirect it in. Take the files from `git ls-files`: `git archive` drops `tests/` through `export-ignore`. Set `COPYFILE_DISABLE=1` and pass `--no-xattrs`, or the `._*` files break gen_stub. `COPYFILE_DISABLE=1 git ls-files -z | xargs -0 tar --no-xattrs -czf /tmp/rz.tgz`, then `gamingpc '…' < /tmp/rz.tgz` with the Pi loop's unpack, install, Pest and clean-up on the far side.
 
 `config.m4` passes `-ffp-contract=off`; a build without it may fuse multiply-adds and answer different bytes from a PHP implementation of the same arithmetic. Check with `objdump -d src/.libs/core.o | grep -c fmadd`: 0 on arm64.
 

@@ -33,7 +33,7 @@ it('exposes every constant, class and method the stubs declare', function (): vo
 
     expect($declared['constants'])->toHaveCount(5)
         ->and(array_keys($declared['classes']))->toBe(['RasterScanner'])
-        ->and($declared['classes']['RasterScanner'])->toHaveCount(7);
+        ->and($declared['classes']['RasterScanner'])->toHaveCount(10);
 
     foreach ($declared['constants'] as $constant) {
         expect(defined($constant))->toBeTrue("{$constant} is missing");

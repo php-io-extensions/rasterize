@@ -91,3 +91,78 @@ it('refuses malformed contours and points, naming them', function (Closure $call
 it('takes the limit itself', function (): void {
     expect((new RasterScanner(0, 0, 4, 4, false))->polyline([-RASTER_LIMIT, -RASTER_LIMIT, RASTER_LIMIT, RASTER_LIMIT]))->not->toBe('');
 });
+
+it('cuts a rounded rect corner by its own quarter circle', function (): void {
+    // row 0 samples y = 0.5: t = -0.75, h = 2·sqrt(0.4375) ≈ 1.32, left ≈ 0.68, so the first centre in is 1.5
+    $scanner = new RasterScanner(0, 0, 6, 4, false);
+
+    expect(grid($scanner->roundRect(0, 0, 6, 4, [2, 0, 0, 0]), 0, 0, 6, 4))->toBe(['.#####', '######', '######', '######']);
+});
+
+it('answers a square rounded rect as the path of its box when the radii are zero', function (bool $antialias): void {
+    $scanner = new RasterScanner(0, 0, 16, 12, $antialias);
+
+    expect($scanner->roundRect(2.3, 1.7, 11.7, 7.9, [0, 0, 0, 0]))->toBe($scanner->path([[2.3, 1.7, 11.7, 1.7, 11.7, 7.9, 2.3, 7.9]]));
+})->with([false, true]);
+
+it('answers a rounded rect that is a circle as the ellipse', function (bool $antialias): void {
+    $scanner = new RasterScanner(0, 0, 24, 24, $antialias);
+
+    expect($scanner->roundRect(0, 0, 20, 20, [10, 10, 10, 10]))->toBe($scanner->ellipse(10, 10, 10, 10));
+})->with([false, true]);
+
+it('rings a rounded rect: the band and the inset box share no pixel and make the box', function (): void {
+    $scanner = new RasterScanner(0, 0, 32, 24, false);
+    $cells = fn (string $bytes): array => array_merge(...array_map(fn (array $s): array => array_map(fn (int $i): string => ($s[1] + $i).','.$s[0], range(0, $s[2] - 1)), spans($bytes)));
+    $band = $cells($scanner->roundRing(2, 2, 26, 18, [6, 3, 0, 5], 2));
+    $inner = $cells($scanner->roundRect(4, 4, 24, 16, [4, 1, 0, 3]));
+    $outer = $cells($scanner->roundRect(2, 2, 26, 18, [6, 3, 0, 5]));
+
+    expect(array_intersect($band, $inner))->toBe([])
+        ->and([...$band, ...$inner])->toEqualCanonicalizing($outer)
+        ->and($scanner->roundRing(2, 2, 22, 12, [3, 3, 3, 3], 5))->toBe($scanner->roundRect(2, 2, 22, 12, [3, 3, 3, 3]));
+});
+
+it('blurs a shadow by the smoothstep profile at each pixel centre', function (): void {
+    $scanner = new RasterScanner(0, 0, 64, 64, true);
+    $row = [];
+    foreach (spans($scanner->shadow(12, 12, 52, 52, 0, 8)) as [$y, $x, $length, $coverage]) {
+        if ($y === 32) {
+            for ($i = 0; $i < $length; $i++) {
+                $row[$x + $i] = $coverage;
+            }
+        }
+    }
+
+    for ($k = -8; $k <= 8; $k++) {
+        $t = min(1.0, max(0.0, ($k + 0.5 + 8) / 16));
+        $expected = (int) floor((1 - $t * $t * (3 - 2 * $t)) * 255 + 0.5);
+        expect($row[52 + $k] ?? 0)->toBe($expected)->and($row[11 - $k] ?? 0)->toBe($expected);
+    }
+});
+
+it('draws a zero-blur shadow as the hard box in both edge modes, and thresholds hard edges at 128', function (): void {
+    $hard = new RasterScanner(0, 0, 32, 32, false);
+    $soft = new RasterScanner(0, 0, 32, 32, true);
+
+    expect($soft->shadow(4, 4, 14, 12, 0, 0))->toBe($hard->path([[4, 4, 14, 4, 14, 12, 4, 12]]))
+        ->and($hard->shadow(4, 4, 14, 12, 0, 0))->toBe($hard->path([[4, 4, 14, 4, 14, 12, 4, 12]]))
+        ->and(array_unique(array_column(spans($hard->shadow(8, 8, 24, 24, 3, 5)), 3)))->toBe([255]);
+});
+
+it('cuts the rounded shapes to the clip', function (bool $antialias): void {
+    $scanner = new RasterScanner(8, 8, 16, 16, $antialias);
+
+    foreach ([$scanner->roundRect(2, 2, 14, 14, [4, 4, 4, 4]), $scanner->roundRing(18, 18, 28, 28, [3, 3, 3, 3], 2), $scanner->shadow(2, 2, 14, 14, 3, 4)] as $bytes) {
+        expect($bytes)->not->toBe('');
+        foreach (spans($bytes) as [$y, $x, $length]) {
+            expect($y >= 8 && $y < 24 && $x >= 8 && $x + $length <= 24)->toBeTrue();
+        }
+    }
+    expect($scanner->roundRect(30, 0, 35, 5, [2, 2, 2, 2]))->toBe('')
+        ->and($scanner->shadow(40, 40, 45, 45, 1, 2))->toBe('');
+})->with([false, true]);
+
+it('refuses radii that are not four finite numbers', function (array $radii): void {
+    expect(fn () => (new RasterScanner(0, 0, 8, 8, false))->roundRect(0, 0, 4, 4, $radii))->toThrow(ValueError::class);
+})->with([[[1, 2, 3]], [[1, 2, 3, 'x']], [[1, 2, 3, INF]], [['a' => 1, 'b' => 2, 'c' => 3, 'd' => 4]]]);

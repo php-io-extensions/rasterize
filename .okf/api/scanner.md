@@ -5,7 +5,7 @@ description: Constants, RasterScanner: every method, the span bytes, the edge ru
 resource: stubs/
 tags: [rasterize, spans, c]
 status: draft
-generated: { by: claude-opus/5.5, at: 2026-10-03T22:56:49Z }
+generated: { by: claude-opus/5.5, at: 2026-11-05T00:00:00Z }
 sources:
   - id: stubs
     resource: stubs/
@@ -19,7 +19,7 @@ sources:
 
 Geometry only. No pixels, no stores, no framework names, no dependency.[^stubs]
 
-Layers: `src/core.{h,c}` plain C (paths, ellipses, rings, one-pixel lines, the row scan; no Zend; memory through two function pointers the class passes). `src/RasterScanner.c` the Zend class over it. `src/rasterize.c` module + constants.[^core]
+Layers: `src/core.{h,c}` plain C (paths, ellipses, rings, rounded rects, rounded rings, shadows, one-pixel lines, the row scan; no Zend; memory through two function pointers the class passes). `src/RasterScanner.c` the Zend class over it. `src/rasterize.c` module + constants.[^core]
 
 # Constants
 
@@ -35,6 +35,9 @@ Layers: `src/core.{h,c}` plain C (paths, ellipses, rings, one-pixel lines, the r
 | `path(array $contours, int $rule)` | contours: a list of flat `x, y…` lists, each closed implicitly; non-zero or even-odd |
 | `ellipse(cx, cy, rx, ry)` | axis-aligned; nothing when a radius is not positive |
 | `ring(cx, cy, rx, ry, stroke)` | band between `r + stroke / 2` and `r − stroke / 2`; inner part dropped when an inner radius is not positive |
+| `roundRect(x0, y0, x1, y1, radii)` | box `[x0, x1) × [y0, y1)`, radii `[tl, tr, br, bl]` already held to `0..min(w, h)/2`; one interval a line, a corner's end at `corner x ∓ r·sqrt(1 − t²)`, written as the ellipse is (a circle-shaped box answers the ellipse's bytes) |
+| `roundRing(x0, y0, x1, y1, radii, inset)` | band between the box and the box inset by `inset` (radii `max(0, r − inset)`); the whole box when the inset box is empty |
+| `shadow(x0, y0, x1, y1, radius, blur)` | coverage `1 − smoothstep(−blur, blur, d)` once at each pixel centre, `d` the signed distance to the box rounded by `radius`; blur ≤ 0 = the hard box (in where `d < 0`); hard edges: ≥ 128 → 255. Columns more than `radius + blur + 2` inside both sides: one sample at the box centre x, one run |
 | `polyline(array $points, bool $closed)` | one-pixel lines between floored points, every pixel once, coverage 255 in either mode |
 
 Answer: span bytes, 7 each, little-endian `y`, `x`, `length` (uint16), `coverage` (uint8); rows ascending, `x` ascending, no overlap, coverage 1..255; empty string for nothing.
