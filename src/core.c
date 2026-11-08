@@ -53,6 +53,28 @@ static double raster_clamp(double value, double low, double high)
 	return value < low ? low : (value > high ? high : value);
 }
 
+/*
+ * The scan cut to a shape's extent (x0, y0)-(x1, y1), a pixel more each side: outside it a sample line has no
+ * interval, so scanning only these rows and columns gives the whole clip's spans. 0 when nothing of it is in the clip.
+ */
+static int raster_narrow(const raster_scan *scan, double x0, double y0, double x1, double y1, raster_scan *out)
+{
+	*out = *scan;
+	out->left = (int) raster_clamp(floor(x0) - 1, (double) scan->left, (double) scan->right);
+	out->right = (int) raster_clamp(ceil(x1) + 1, (double) scan->left, (double) scan->right);
+	out->top = (int) raster_clamp(floor(y0) - 1, (double) scan->top, (double) scan->bottom);
+	out->bottom = (int) raster_clamp(ceil(y1) + 1, (double) scan->top, (double) scan->bottom);
+
+	return out->right > out->left && out->bottom > out->top;
+}
+
+static int raster_int_order(const void *left, const void *right)
+{
+	int a = *(const int *) left, b = *(const int *) right;
+
+	return (a > b) - (a < b);
+}
+
 /* Rows of the clip into spans, each sample line's intervals asked of `at`. */
 static void raster_scan_rows(const raster_scan *scan, raster_at at, void *shape, raster_spans *out)
 {
@@ -96,6 +118,9 @@ static void raster_scan_rows(const raster_scan *scan, raster_at at, void *shape,
 	double weight = 1.0 / RASTER_SAMPLES;
 	double *cover = memory->grow(NULL, (size_t) width * sizeof(double));
 	double *delta = memory->grow(NULL, ((size_t) width + 1) * sizeof(double));
+	/* The columns a row wrote in cover or delta; between two of them both are 0, so every pixel has the same value. */
+	int *touched = NULL;
+	size_t touched_count = 0, touched_capacity = 0;
 
 	for (int i = 0; i < width; i++) {
 		cover[i] = 0.0;
@@ -107,6 +132,7 @@ static void raster_scan_rows(const raster_scan *scan, raster_at at, void *shape,
 	for (int row = scan->top; row < scan->bottom; row++) {
 		int low = width, high = -1;
 
+		touched_count = 0;
 		for (int k = 0; k < RASTER_SAMPLES; k++) {
 			intervals.count = 0;
 			at(shape, (double) row + ((double) k + 0.5) / RASTER_SAMPLES, &intervals, memory);
@@ -126,6 +152,10 @@ static void raster_scan_rows(const raster_scan *scan, raster_at at, void *shape,
 				int ia = (int) floor(a);
 				int ib = (int) floor(b);
 
+				raster_reserve(memory, (void **) &touched, &touched_capacity, touched_count + 3, sizeof(int));
+				touched[touched_count++] = ia - left;
+				touched[touched_count++] = ia + 1 - left;
+				touched[touched_count++] = ib - left;
 				if (ia == ib) {
 					cover[ia - left] += (b - a) * weight;
 				} else {
@@ -153,32 +183,69 @@ static void raster_scan_rows(const raster_scan *scan, raster_at at, void *shape,
 		int last = high < width - 1 ? high : width - 1;
 		double running = 0.0;
 		int start = -1, value = 0;
+		size_t next = 0;
+		/* many written columns (a grid, a dense path): sorting them costs more than walking the row pixel by pixel */
+		int dense = touched_count * 8 >= (size_t) (last - low + 1);
 
-		for (int i = low; i <= last; i++) {
+		if (!dense) {
+			qsort(touched, touched_count, sizeof(int), raster_int_order);
+		}
+		for (int i = low; i <= last;) {
 			running += delta[i];
 			double c = cover[i] + running;
 			int v = (int) floor(raster_clamp(c, 0.0, 1.0) * 255 + 0.5);
 
-			if (start >= 0 && v == value) {
+			if (!(start >= 0 && v == value)) {
+				if (start >= 0 && value > 0) {
+					raster_emit(scan, out, row, left + start, i - start, value);
+				}
+				start = i;
+				value = v;
+			}
+
+			if (dense) {
+				i++;
 				continue;
 			}
-			if (start >= 0 && value > 0) {
-				raster_emit(scan, out, row, left + start, i - start, value);
+			/* the pixels up to the next written column hold cover 0 and delta 0: each is `running`'s value */
+			while (next < touched_count && touched[next] <= i) {
+				next++;
 			}
-			start = i;
-			value = v;
+			int to = next < touched_count && touched[next] <= last ? touched[next] : last + 1;
+			if (to > i + 1) {
+				int w = (int) floor(raster_clamp(running, 0.0, 1.0) * 255 + 0.5);
+
+				if (w != value) {
+					if (value > 0) {
+						raster_emit(scan, out, row, left + start, i + 1 - start, value);
+					}
+					start = i + 1;
+					value = w;
+				}
+			}
+			i = to;
 		}
 		if (value > 0) {
 			raster_emit(scan, out, row, left + start, last + 1 - start, value);
 		}
-		for (int i = low; i <= high; i++) {
-			delta[i] = 0.0;
-			if (i < width) {
-				cover[i] = 0.0;
+		if (dense) {
+			for (int i = low; i <= high; i++) {
+				delta[i] = 0.0;
+				if (i < width) {
+					cover[i] = 0.0;
+				}
+			}
+		} else {
+			for (size_t k = 0; k < touched_count; k++) {
+				delta[touched[k]] = 0.0;
+				if (touched[k] < width) {
+					cover[touched[k]] = 0.0;
+				}
 			}
 		}
 	}
 
+	memory->release(touched);
 	memory->release(cover);
 	memory->release(delta);
 	memory->release(intervals.pairs);
@@ -279,6 +346,7 @@ void raster_path(const raster_scan *scan, const raster_contour *contours, size_t
 	}
 
 	raster_path_shape p = {NULL, 0, 0, NULL, 0, NULL, rule == RASTER_EVEN_ODD};
+	double left = INFINITY, top = INFINITY, right = -INFINITY, bottom = -INFINITY;
 	p.edges = memory->grow(NULL, total * sizeof(raster_edge));
 	for (size_t c = 0; c < contour_count; c++) {
 		const double *f = contours[c].points;
@@ -286,6 +354,11 @@ void raster_path(const raster_scan *scan, const raster_contour *contours, size_t
 
 		for (size_t i = 0; i < n; i++) {
 			size_t j = (i + 1) % n;
+
+			left = f[2 * i] < left ? f[2 * i] : left;
+			right = f[2 * i] > right ? f[2 * i] : right;
+			top = f[2 * i + 1] < top ? f[2 * i + 1] : top;
+			bottom = f[2 * i + 1] > bottom ? f[2 * i + 1] : bottom;
 			double x0 = f[2 * i], y0 = f[2 * i + 1], x1 = f[2 * j], y1 = f[2 * j + 1];
 
 			if (y0 == y1) {
@@ -297,11 +370,12 @@ void raster_path(const raster_scan *scan, const raster_contour *contours, size_t
 			p.count++;
 		}
 	}
-	if (p.count > 0) {
+	raster_scan cut;
+	if (p.count > 0 && raster_narrow(scan, left, top, right, bottom, &cut)) {
 		qsort(p.edges, p.count, sizeof(raster_edge), raster_edge_order);
 		p.active = memory->grow(NULL, p.count * sizeof(size_t));
 		p.crossings = memory->grow(NULL, p.count * sizeof(raster_crossing));
-		raster_scan_rows(scan, raster_path_at, &p, out);
+		raster_scan_rows(&cut, raster_path_at, &p, out);
 		memory->release(p.active);
 		memory->release(p.crossings);
 	}
@@ -359,21 +433,23 @@ static void raster_ring_at(void *shape, double y, raster_intervals *intervals, c
 void raster_ellipse(const raster_scan *scan, double cx, double cy, double rx, double ry, raster_spans *out)
 {
 	raster_ellipse_shape e = {cx, cy, rx, ry, 0.0};
+	raster_scan cut;
 
-	if (rx <= 0 || ry <= 0) {
+	if (rx <= 0 || ry <= 0 || !raster_narrow(scan, cx - rx, cy - ry, cx + rx, cy + ry, &cut)) {
 		return;
 	}
-	raster_scan_rows(scan, raster_ellipse_at, &e, out);
+	raster_scan_rows(&cut, raster_ellipse_at, &e, out);
 }
 
 void raster_ring(const raster_scan *scan, double cx, double cy, double rx, double ry, double stroke, raster_spans *out)
 {
 	raster_ellipse_shape e = {cx, cy, rx, ry, stroke / 2};
+	raster_scan cut;
 
-	if (rx <= 0 || ry <= 0 || stroke <= 0) {
+	if (rx <= 0 || ry <= 0 || stroke <= 0 || !raster_narrow(scan, cx - (rx + e.half), cy - (ry + e.half), cx + (rx + e.half), cy + (ry + e.half), &cut)) {
 		return;
 	}
-	raster_scan_rows(scan, raster_ring_at, &e, out);
+	raster_scan_rows(&cut, raster_ring_at, &e, out);
 }
 
 /* Rounded rects, rounded rings and shadows: NativeScanner's steps, in its order ------------- */
@@ -473,8 +549,11 @@ void raster_round_rect(const raster_scan *scan, double x0, double y0, double x1,
 		return;
 	}
 
-	/* 2. one interval a sample line */
-	raster_scan_rows(scan, raster_round_rect_at, &q, out);
+	/* 2. one interval a sample line, over the box's rows and columns */
+	raster_scan cut;
+	if (raster_narrow(scan, x0, y0, x1, y1, &cut)) {
+		raster_scan_rows(&cut, raster_round_rect_at, &q, out);
+	}
 }
 
 static double raster_shrink(double r, double inset)
@@ -503,7 +582,10 @@ void raster_round_ring(const raster_scan *scan, double x0, double y0, double x1,
 	}
 	q.hollow = q.ix1 > q.ix0 && q.iy1 > q.iy0;
 
-	raster_scan_rows(scan, raster_round_ring_at, &q, out);
+	raster_scan cut;
+	if (raster_narrow(scan, x0, y0, x1, y1, &cut)) {
+		raster_scan_rows(&cut, raster_round_ring_at, &q, out);
+	}
 }
 
 /* Signed distance from (dx, dy), measured from the box centre, to the box of half sizes hx, hy rounded by r. */

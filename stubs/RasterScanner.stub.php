@@ -53,4 +53,28 @@ final class RasterScanner
      * @param array $points A flat list x, y, x, y… of numbers.
      */
     public function polyline(array $points, bool $closed = false): string {}
+
+    /**
+     * Many shapes in one call: each op is [RASTER_OP_*, ...the arguments of the method of that name, every one given],
+     * e.g. [RASTER_OP_ELLIPSE, cx, cy, rx, ry] or [RASTER_OP_PATH, contours, rule]. Every op is checked before any is
+     * scanned; the answer is one span string an op, in order.
+     *
+     * @param array $ops A list of ops.
+     * @return array A list of span strings.
+     */
+    public function batch(array $ops): array {}
+
+    /** Whether fill() can paint: ext-fb is loaded and exports its span sink. */
+    public static function fills(): bool {}
+
+    /**
+     * batch()'s ops painted straight into an FbBuffer, each at its colour, in order, as FbBuffer::paintSpans()
+     * paints their spans. The clip must lie inside the buffer; every op and colour is checked before any is
+     * painted. Error when ext-fb is not loaded.
+     *
+     * @param array $ops A list of ops.
+     * @param array $colours A list of 0xRRGGBBAA, one an op.
+     * @return array A list, one an op: [x, y, width, height] of what it painted, or null.
+     */
+    public function fill(array $ops, array $colours, object $target): array {}
 }

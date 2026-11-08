@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: f936e1b4eafbdad362b9767f36f141e0de9fa757 */
+ * Stub hash: b41fcaf19f00cb460accfb119047c733027be2a1 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_RasterScanner___construct, 0, 0, 5)
 	ZEND_ARG_TYPE_INFO(0, x, IS_LONG, 0)
@@ -66,6 +66,18 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_RasterScanner_polyline, 0,
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, closed, _IS_BOOL, 0, "false")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_RasterScanner_batch, 0, 1, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, ops, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_RasterScanner_fills arginfo_class_RasterScanner_antialias
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_RasterScanner_fill, 0, 3, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, ops, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, colours, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, target, IS_OBJECT, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_METHOD(RasterScanner, __construct);
 ZEND_METHOD(RasterScanner, clip);
 ZEND_METHOD(RasterScanner, antialias);
@@ -76,6 +88,9 @@ ZEND_METHOD(RasterScanner, roundRect);
 ZEND_METHOD(RasterScanner, roundRing);
 ZEND_METHOD(RasterScanner, shadow);
 ZEND_METHOD(RasterScanner, polyline);
+ZEND_METHOD(RasterScanner, batch);
+ZEND_METHOD(RasterScanner, fills);
+ZEND_METHOD(RasterScanner, fill);
 
 static const zend_function_entry class_RasterScanner_methods[] = {
 	ZEND_ME(RasterScanner, __construct, arginfo_class_RasterScanner___construct, ZEND_ACC_PUBLIC)
@@ -88,6 +103,9 @@ static const zend_function_entry class_RasterScanner_methods[] = {
 	ZEND_ME(RasterScanner, roundRing, arginfo_class_RasterScanner_roundRing, ZEND_ACC_PUBLIC)
 	ZEND_ME(RasterScanner, shadow, arginfo_class_RasterScanner_shadow, ZEND_ACC_PUBLIC)
 	ZEND_ME(RasterScanner, polyline, arginfo_class_RasterScanner_polyline, ZEND_ACC_PUBLIC)
+	ZEND_ME(RasterScanner, batch, arginfo_class_RasterScanner_batch, ZEND_ACC_PUBLIC)
+	ZEND_ME(RasterScanner, fills, arginfo_class_RasterScanner_fills, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(RasterScanner, fill, arginfo_class_RasterScanner_fill, ZEND_ACC_PUBLIC)
 	ZEND_FE_END
 };
 

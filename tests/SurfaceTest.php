@@ -19,7 +19,7 @@ function stubDeclarations(): array
                 $declared['classes'][$class] ??= [];
             } elseif (preg_match('/^const\s+(\w+)/', $line, $m)) {
                 $declared['constants'][] = $m[1];
-            } elseif ($class !== null && preg_match('/^\s+public\s+function\s+(\w+)/', $line, $m)) {
+            } elseif ($class !== null && preg_match('/^\s+public\s+(?:static\s+)?function\s+(\w+)/', $line, $m)) {
                 $declared['classes'][$class][] = $m[1];
             }
         }
@@ -31,9 +31,9 @@ function stubDeclarations(): array
 it('exposes every constant, class and method the stubs declare', function (): void {
     $declared = stubDeclarations();
 
-    expect($declared['constants'])->toHaveCount(5)
+    expect($declared['constants'])->toHaveCount(12)
         ->and(array_keys($declared['classes']))->toBe(['RasterScanner'])
-        ->and($declared['classes']['RasterScanner'])->toHaveCount(10);
+        ->and($declared['classes']['RasterScanner'])->toHaveCount(13);
 
     foreach ($declared['constants'] as $constant) {
         expect(defined($constant))->toBeTrue("{$constant} is missing");
@@ -46,7 +46,7 @@ it('exposes every constant, class and method the stubs declare', function (): vo
 });
 
 it('reports its version', function (): void {
-    expect(phpversion('rasterize'))->toBe('0.11.0');
+    expect(phpversion('rasterize'))->toBe('0.11.1');
 });
 
 it('declares a final class that cannot be cloned or serialized', function (): void {

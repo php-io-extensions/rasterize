@@ -166,3 +166,63 @@ it('cuts the rounded shapes to the clip', function (bool $antialias): void {
 it('refuses radii that are not four finite numbers', function (array $radii): void {
     expect(fn () => (new RasterScanner(0, 0, 8, 8, false))->roundRect(0, 0, 4, 4, $radii))->toThrow(ValueError::class);
 })->with([[[1, 2, 3]], [[1, 2, 3, 'x']], [[1, 2, 3, INF]], [['a' => 1, 'b' => 2, 'c' => 3, 'd' => 4]]]);
+
+it('walks only the rows and columns a shape reaches: a small shape in a large clip answers the spans of a tight one', function (bool $antialias): void {
+    $tight = new RasterScanner(497, 697, 26, 22, $antialias);
+    $large = new RasterScanner(0, 0, 4000, 3000, $antialias);
+    $shapes = [
+        'path' => fn (RasterScanner $s) => $s->path([[500.3, 701.2, 517.7, 703.4, 506.1, 713.9]]),
+        'ellipse' => fn (RasterScanner $s) => $s->ellipse(509.25, 707.5, 8.6, 6.3),
+        'ring' => fn (RasterScanner $s) => $s->ring(509.25, 707.5, 8.6, 6.3, 2.5),
+        'rounded rect' => fn (RasterScanner $s) => $s->roundRect(500.4, 700.6, 518.6, 713.7, [4.0, 0.0, 6.5, 2.25]),
+        'rounded ring' => fn (RasterScanner $s) => $s->roundRing(500.4, 700.6, 518.6, 713.7, [4.0, 0.0, 6.5, 2.25], 1.75),
+    ];
+    foreach ($shapes as $name => $draw) {
+        expect($draw($tight))->not->toBe('', $name)
+            ->and(bin2hex($draw($large)))->toBe(bin2hex($draw($tight)), $name);
+    }
+})->with([true, false]);
+
+it('answers a batch of ops as the calls of the same names, one span string an op, in order', function (bool $antialias): void {
+    $scanner = new RasterScanner(0, 0, 40, 30, $antialias);
+    $ops = [
+        [RASTER_OP_PATH, [[1.5, 2, 30.2, 4.1, 9, 25.7], [5, 5, 12, 5, 12, 12]], RASTER_EVEN_ODD],
+        [RASTER_OP_ELLIPSE, 20.25, 15, 9.5, 6],
+        [RASTER_OP_RING, 20, 15.5, 9, 7, 2.5],
+        [RASTER_OP_ROUND_RECT, 2.4, 3, 33.1, 26, [4, 0, 6.5, 2]],
+        [RASTER_OP_ROUND_RING, 2.4, 3, 33.1, 26, [4, 0, 6.5, 2], 1.75],
+        [RASTER_OP_SHADOW, 6, 7, 30, 22, 3, 2.5],
+        [RASTER_OP_POLYLINE, [1, 1, 38, 4, 20, 28], true],
+        [RASTER_OP_ELLIPSE, 500, 500, 3, 3],
+    ];
+    $one = [
+        $scanner->path($ops[0][1], RASTER_EVEN_ODD),
+        $scanner->ellipse(20.25, 15, 9.5, 6),
+        $scanner->ring(20, 15.5, 9, 7, 2.5),
+        $scanner->roundRect(2.4, 3, 33.1, 26, [4, 0, 6.5, 2]),
+        $scanner->roundRing(2.4, 3, 33.1, 26, [4, 0, 6.5, 2], 1.75),
+        $scanner->shadow(6, 7, 30, 22, 3, 2.5),
+        $scanner->polyline([1, 1, 38, 4, 20, 28], true),
+        '',
+    ];
+
+    expect(array_map('bin2hex', $scanner->batch($ops)))->toBe(array_map('bin2hex', $one))
+        ->and($scanner->batch([]))->toBe([]);
+})->with([true, false]);
+
+it('refuses a batch with any bad op before scanning one, naming it', function (array $op, string $message): void {
+    $scanner = new RasterScanner(0, 0, 8, 8, true);
+
+    expect(fn () => $scanner->batch([[RASTER_OP_ELLIPSE, 4, 4, 2, 2], $op]))->toThrow(ValueError::class, $message);
+})->with([
+    'not a list' => [['a' => 1], 'Op 1 is not a list that starts with a RASTER_OP_* shape'],
+    'an unknown op' => [[99, 1, 2], 'Op 1 is not a list that starts with a RASTER_OP_* shape'],
+    'too few entries' => [[RASTER_OP_ELLIPSE, 4, 4, 2], 'Op 1 takes 5 entries, the op and its arguments; it has 4'],
+    'a string for a number' => [[RASTER_OP_RING, 4, 4, 2, 2, 'x'], 'Op 1: stroke is not a number'],
+    'a number past the limit' => [[RASTER_OP_SHADOW, 0, 0, 2 ** 31, 4, 1, 1], 'x1 2147483648 is past'],
+    'bad radii' => [[RASTER_OP_ROUND_RECT, 0, 0, 4, 4, [1, 1, 1]], 'Radii are a list of four numbers'],
+    'a bad rule' => [[RASTER_OP_PATH, [[0, 0, 4, 0, 0, 4]], 7], 'Op 1: the rule is not RASTER_NON_ZERO or RASTER_EVEN_ODD'],
+    'a bad contour' => [[RASTER_OP_PATH, [[0, 0, 4]], RASTER_NON_ZERO], 'Contour 0 is not a flat list of x, y pairs'],
+    'closed not a bool' => [[RASTER_OP_POLYLINE, [0, 0, 4, 4], 1], 'Op 1: closed is not a bool'],
+    'bad points' => [[RASTER_OP_POLYLINE, [0, 0, 'y', 4], false], 'Points holds something that is not a number'],
+]);

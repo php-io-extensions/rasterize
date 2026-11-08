@@ -25,6 +25,15 @@
 #define RASTER_LIMIT 1073741824   /* 2^30: past it, one-pixel line arithmetic would leave 64-bit integers */
 #define RASTER_MAX_SIDE 65535
 
+/* The shapes RasterScanner::batch() takes: [op, ...the arguments of the method of that name]. */
+#define RASTER_OP_PATH 1
+#define RASTER_OP_ELLIPSE 2
+#define RASTER_OP_RING 3
+#define RASTER_OP_ROUND_RECT 4
+#define RASTER_OP_ROUND_RING 5
+#define RASTER_OP_SHADOW 6
+#define RASTER_OP_POLYLINE 7
+
 typedef struct {
 	void *(*grow)(void *pointer, size_t size);   /* realloc that never answers NULL */
 	void (*release)(void *pointer);
