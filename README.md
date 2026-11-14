@@ -188,9 +188,26 @@ rasterize support => enabled
 Version => 0.11.x
 ```
 
+#### Stroke a polyline
+
+`RasterStroker` turns a polyline into the contours that, filled with the non-zero rule, are its stroke: a quad for each segment, a miter, round or bevel join at each corner, and a butt, round or square cap at each end. Every contour comes back turned to positive area, so the pieces unite where they overlap. Hand the contours to `RasterScanner::path()`.
+
+```php
+$contours = RasterStroker::outline([[20, 20], [120, 20], [120, 90]], 6.0, false, RASTER_CAP_ROUND, RASTER_JOIN_ROUND);
+$spans = $scanner->path($contours, RASTER_NON_ZERO);
+```
+
+A dash pattern cuts the polyline into the pieces it leaves, each of which is stroked as its own polyline:
+
+```php
+foreach (RasterStroker::dashed([[20, 20], [120, 20], [120, 90]], false, [8, 4], 0.0) as $piece) {
+    $contours = RasterStroker::outline($piece['points'], 6.0, $piece['closed']);
+}
+```
+
 ## API
 
-One final class and 5 constants, declared in [`stubs/`](stubs). Every shape method answers span bytes, or an empty string when the shape covers nothing inside the clip. A coordinate that is not finite or lies past `±RASTER_LIMIT`, a list that is not a flat list of numbers in pairs, or an unknown fill rule throws `ValueError`. The class cannot be cloned or serialized, and calling `__construct()` a second time throws `Error`.
+Two final classes and 19 constants, declared in [`stubs/`](stubs). Every shape method answers span bytes, or an empty string when the shape covers nothing inside the clip. A coordinate that is not finite or lies past `±RASTER_LIMIT`, a list that is not a flat list of numbers in pairs, or an unknown fill rule throws `ValueError`. The class cannot be cloned or serialized, and calling `__construct()` a second time throws `Error`.
 
 ### Constants
 
@@ -201,6 +218,9 @@ One final class and 5 constants, declared in [`stubs/`](stubs). Every shape meth
 | `RASTER_SPAN_BYTES` | `7` | The bytes in one span. |
 | `RASTER_SAMPLES` | `16` | The sample lines per row an anti-aliased scanner uses. |
 | `RASTER_LIMIT` | `1073741824` | 2³⁰: the largest coordinate magnitude accepted. |
+| `RASTER_CAP_BUTT`, `RASTER_CAP_ROUND`, `RASTER_CAP_SQUARE` | `0`, `1`, `2` | How an open stroke ends: flat at the end point, a half circle past it, or flat half a width past it. |
+| `RASTER_JOIN_MITER`, `RASTER_JOIN_ROUND`, `RASTER_JOIN_BEVEL` | `0`, `1`, `2` | How a stroke turns a corner: a sharp point (cut to a bevel past the miter limit), an arc, or cut flat. |
+| `RASTER_MITER_LIMIT` | `4.0` | The miter limit a stroke has when none is given. |
 
 ### Spans
 
@@ -258,6 +278,26 @@ $outline = $scanner->ring(160, 120, 80, 80, 6);
 #### `polyline(array $points, bool $closed = false): string`
 
 Draws one-pixel lines between consecutive points of the flat list `x, y, x, y…`, each point floored to its pixel, every pixel once, coverage 255 in either edge mode. `$closed` adds the line from the last point back to the first.
+
+### RasterStroker
+
+Static methods only; the class is never made. Points are lists of `[x, y]` numbers, finite and within `±RASTER_LIMIT`. Answers are plain PHP arrays of floats. The arithmetic is IEEE double in a fixed order, and the C library's `hypot`, `fmod`, `atan2`, `acos`, `sin` and `cos`: it answers the same numbers as the same steps in PHP on one machine.
+
+#### `RasterStroker::outline(array $points, float $stroke, bool $closed, int $cap = RASTER_CAP_BUTT, int $join = RASTER_JOIN_MITER, float $miterLimit = RASTER_MITER_LIMIT, ?array $direction = null): array`
+
+The contours that, filled with the non-zero rule, are the stroke of `$points` `$stroke` wide: a list of flat `x, y, x, y…` lists. A point that repeats the one before it is dropped, as is the last of a closed polyline that repeats the first. A quad for each segment; at each corner the join, which a miter cuts to a bevel where its tip would sit more than `$miterLimit` half-strokes from the corner; at each end of an open polyline the cap. Every contour is turned to positive signed area; one with no area is dropped. A stroke that is not above 0, a number or not, is nothing.
+
+A polyline whose points all repeat, with at least two given, has no length: it is a dot under a round cap and a square under a square one (turned to `$direction`, a unit `[dx, dy]`, along x when none), and nothing under a butt cap. A round join or cap strays from its arc by less than a tenth of a pixel.
+
+A segment so short that its length is 0 throws `DivisionByZeroError`, as the same arithmetic does in PHP.
+
+---
+
+#### `RasterStroker::dashed(array $points, bool $closed, array $dash, float $offset): array`
+
+`$points` cut into the pieces a dash pattern leaves: on, off, on, off… (an odd count is repeated), starting `$offset` into it. Each piece is `['points' => list of [x, y], 'closed' => bool, 'direction' => [dx, dy]]`, `direction` the way it runs where it ends. A piece that runs round a corner keeps the corner. An on element of length 0 leaves a piece of no length: a dot under a round cap. A closed polyline is walked once round; a dash that runs across its start is one piece, and one that never stops is the whole polyline, closed. Dash lengths are finite numbers, 0 or more. A pattern with nothing longer than `1e-12` in it is nothing.
+
+---
 
 ## Extensions you might use with this one
 

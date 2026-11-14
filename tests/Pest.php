@@ -34,3 +34,26 @@ function grid(string $bytes, int $x, int $y, int $width, int $height): array
 
     return $rows;
 }
+
+/**
+ * A flat x, y… list as a list of [x, y].
+ *
+ * @return list<array{float, float}>
+ */
+function pairs(array $flat): array
+{
+    return array_chunk($flat, 2);
+}
+
+/** Twice the signed area of a flat x, y… contour: positive turns the way the stroker keeps. */
+function area(array $flat): float
+{
+    $n = intdiv(count($flat), 2);
+    $sum = 0.0;
+    for ($i = 0; $i < $n; $i++) {
+        $j = ($i + 1) % $n;
+        $sum += $flat[2 * $i] * $flat[2 * $j + 1] - $flat[2 * $j] * $flat[2 * $i + 1];
+    }
+
+    return $sum;
+}

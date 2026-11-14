@@ -73,3 +73,51 @@ const RASTER_OP_SHADOW = UNKNOWN;
  * @cvalue RASTER_OP_POLYLINE
  */
 const RASTER_OP_POLYLINE = UNKNOWN;
+
+/**
+ * RasterStroker: the stroke ends a butt cap, a round cap, a square cap.
+ *
+ * @var int
+ * @cvalue RASTER_CAP_BUTT
+ */
+const RASTER_CAP_BUTT = UNKNOWN;
+
+/**
+ * @var int
+ * @cvalue RASTER_CAP_ROUND
+ */
+const RASTER_CAP_ROUND = UNKNOWN;
+
+/**
+ * @var int
+ * @cvalue RASTER_CAP_SQUARE
+ */
+const RASTER_CAP_SQUARE = UNKNOWN;
+
+/**
+ * RasterStroker: a corner is a miter, a round arc, a bevel.
+ *
+ * @var int
+ * @cvalue RASTER_JOIN_MITER
+ */
+const RASTER_JOIN_MITER = UNKNOWN;
+
+/**
+ * @var int
+ * @cvalue RASTER_JOIN_ROUND
+ */
+const RASTER_JOIN_ROUND = UNKNOWN;
+
+/**
+ * @var int
+ * @cvalue RASTER_JOIN_BEVEL
+ */
+const RASTER_JOIN_BEVEL = UNKNOWN;
+
+/**
+ * The miter limit a stroke has when none is given.
+ *
+ * @var float
+ * @cvalue RASTER_MITER_LIMIT
+ */
+const RASTER_MITER_LIMIT = UNKNOWN;

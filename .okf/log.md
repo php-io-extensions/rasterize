@@ -1,5 +1,9 @@
 # Log
 
+## 2026-11-13
+
+* `RasterStroker::outline()` and `::dashed()`: a polyline into the contours of its stroke (a quad a segment, miter, round or bevel joins, butt, round or square caps, every contour turned to positive area) and into the pieces a dash pattern leaves. `src/stroke.{h,c}` plain C, `src/RasterStroker.c` the class, seven constants (`RASTER_CAP_*`, `RASTER_JOIN_*`, `RASTER_MITER_LIMIT`). The steps and their order are those of the PHP stroker it was ported from, and it answers the same bits (16,000 random polylines and dash patterns, 241 of them degenerate ones that threw `DivisionByZeroError` in both; NTS, also under guard malloc). `config.m4` gained `-fno-builtin-sin -fno-builtin-cos`: clang joined a `sin` and a `cos` of one angle into `__sincos_stret` and the arcs differed in the last bit. The stroker calls `hypot`, `fmod`, `atan2`, `acos`, `sin` and `cos`: bits equal PHP's on one machine, not promised across C libraries. Version unchanged. [stroker](api/stroker.md)
+
 ## 2026-11-08
 
 * **Version**: 0.11.1 in `PHP_RASTERIZE_VERSION` (`php_rasterize.h`) and the version test; nothing else changed.

@@ -13,6 +13,7 @@
 #include "php.h"
 #include "php_rasterize.h"
 #include "core.h"
+#include "stroke.h"
 
 typedef struct {
 	raster_scan scan;
@@ -28,5 +29,9 @@ static zend_always_inline phpraster_scanner *phpraster_scanner_from(zend_object 
 extern zend_class_entry *phpraster_ce_RasterScanner;
 
 void phpraster_register_RasterScanner(void);
+
+extern zend_class_entry *phpraster_ce_RasterStroker;
+
+void phpraster_register_RasterStroker(void);
 
 #endif

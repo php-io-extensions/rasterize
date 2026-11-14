@@ -31,9 +31,10 @@ function stubDeclarations(): array
 it('exposes every constant, class and method the stubs declare', function (): void {
     $declared = stubDeclarations();
 
-    expect($declared['constants'])->toHaveCount(12)
-        ->and(array_keys($declared['classes']))->toBe(['RasterScanner'])
-        ->and($declared['classes']['RasterScanner'])->toHaveCount(13);
+    expect($declared['constants'])->toHaveCount(19)
+        ->and(array_keys($declared['classes']))->toBe(['RasterScanner', 'RasterStroker'])
+        ->and($declared['classes']['RasterScanner'])->toHaveCount(13)
+        ->and($declared['classes']['RasterStroker'])->toBe(['outline', 'dashed']);
 
     foreach ($declared['constants'] as $constant) {
         expect(defined($constant))->toBeTrue("{$constant} is missing");

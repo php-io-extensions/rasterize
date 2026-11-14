@@ -29,7 +29,7 @@ Pi from the Mac: tree on the Mac is authoritative, Pi copy disposable. `COPYFILE
 
 Gaming PC from the Mac (through the `gamingpc` alias): a stdin pipe into the alias does not work from a script, so build a tar file and redirect it in. Take the files from `git ls-files`: `git archive` drops `tests/` through `export-ignore`. Set `COPYFILE_DISABLE=1` and pass `--no-xattrs`, or the `._*` files break gen_stub. `COPYFILE_DISABLE=1 git ls-files -z | xargs -0 tar --no-xattrs -czf /tmp/rz.tgz`, then `gamingpc '…' < /tmp/rz.tgz` with the Pi loop's unpack, install, Pest and clean-up on the far side.
 
-`config.m4` passes `-ffp-contract=off`; a build without it may fuse multiply-adds and answer different bytes from a PHP implementation of the same arithmetic. Check with `objdump -d src/.libs/core.o | grep -c fmadd`: 0 on arm64.
+`config.m4` passes `-ffp-contract=off -fno-builtin-sin -fno-builtin-cos`. Without the first the compiler may fuse multiply-adds and answer different bytes from a PHP implementation of the same arithmetic; without the other two it joins the sine and cosine of one angle into a single `sincos` call (`__sincos_stret` on macOS) whose last bit is not always the one `sin()` and `cos()` give alone, and the stroker's arcs differ. Check with `objdump -d src/.libs/core.o src/.libs/stroke.o | grep -c fmadd`: 0 on arm64, and `nm -u src/.libs/stroke.o | grep -i sincos`: nothing.
 
 To test a consumer without the ext, run with a `PHP_INI_SCAN_DIR` that omits `30-rasterize.ini`; `php -n` drops every other conf.d extension too.
 

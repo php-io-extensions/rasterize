@@ -29,6 +29,7 @@ PHP_MINIT_FUNCTION(rasterize)
 	register_rasterize_symbols(module_number);
 
 	phpraster_register_RasterScanner();
+	phpraster_register_RasterStroker();
 	phpraster_find_sink();
 
 	return SUCCESS;
