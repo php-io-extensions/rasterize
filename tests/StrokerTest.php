@@ -32,25 +32,28 @@ it('drops a point that repeats the one before it, and the last of a closed polyl
         ->and(RasterStroker::outline([[0, 0], [10, 0], [10, 10], [0, 0]], 2.0, true))->toBe(RasterStroker::outline([[0, 0], [10, 0], [10, 10]], 2.0, true));
 });
 
-it('fills the outside of a corner with a miter, its tip half a width past the corner\'s diagonal', function (): void {
-    // a right angle at (10, 0), half-width 1: the outer normals are (0, -1) and (1, 0), the tip (11, -1)
+it('answers an open polyline as one contour: out along one side, back along the other', function (): void {
+    // a right angle at (10, 0), half-width 1. Out along the right: (0, -1), the miter's tip (11, -1), (11, 10).
+    // Back along the left: (9, 10), where the two inside edges cross (9, 1), (0, 1).
     $contours = RasterStroker::outline([[0, 0], [10, 0], [10, 10]], 2.0, false);
 
-    expect(count($contours))->toBe(3)
-        ->and(pairs($contours[2]))->toBe([[10.0, 0.0], [10.0, -1.0], [11.0, -1.0], [11.0, 0.0]])
-        ->and(area($contours[2]))->toBe(2.0);
+    expect(count($contours))->toBe(1)
+        ->and(pairs($contours[0]))->toBe([[0.0, -1.0], [11.0, -1.0], [11.0, 10.0], [9.0, 10.0], [9.0, 1.0], [0.0, 1.0]])
+        // an L of 11 by 2 and 2 by 9: 40, and area() is twice the area
+        ->and(area($contours[0]))->toBe(80.0);
 });
 
-it('cuts a miter to a bevel where its tip would be past the miter limit of half-strokes', function (): void {
+it('is a miter\'s tip alone on the outside of a corner, and cuts it to a bevel past the miter limit of half-strokes', function (): void {
     // a turn back on itself at 150 degrees: the tip is 1 / sin(15°) = 3.86 half-widths out
     $points = [[0, 0], [10, 0], [10 - 10 * cos(M_PI / 6), 10 * sin(M_PI / 6)]];
 
     $mitered = RasterStroker::outline($points, 2.0, false, RASTER_CAP_BUTT, RASTER_JOIN_MITER, 4.0);
     $cut = RasterStroker::outline($points, 2.0, false, RASTER_CAP_BUTT, RASTER_JOIN_MITER, 3.0);
 
-    expect(count($mitered[2]))->toBe(8)
-        ->and(count($cut[2]))->toBe(6)
-        ->and(RasterStroker::outline($points, 2.0, false, RASTER_CAP_BUTT, RASTER_JOIN_BEVEL)[2])->toBe($cut[2]);
+    // the tip is one point; the bevel that replaces it is the two ends of the outside edges
+    expect(count($mitered))->toBe(1)
+        ->and(count($cut[0]))->toBe(count($mitered[0]) + 2)
+        ->and(RasterStroker::outline($points, 2.0, false, RASTER_CAP_BUTT, RASTER_JOIN_BEVEL))->toBe($cut);
 });
 
 it('cuts the corner flat with a bevel, and rounds it with an arc whose pieces keep it within a tenth of a pixel', function (): void {
@@ -59,28 +62,49 @@ it('cuts the corner flat with a bevel, and rounds it with an arc whose pieces ke
     $bevel = RasterStroker::outline($points, 2.0, false, RASTER_CAP_BUTT, RASTER_JOIN_BEVEL);
     $round = RasterStroker::outline($points, 2.0, false, RASTER_CAP_BUTT, RASTER_JOIN_ROUND);
 
-    // the corner, then the end of each outer normal
-    expect(pairs($bevel[2]))->toBe([[10.0, 0.0], [10.0, -1.0], [11.0, 0.0]])
-        // a quarter turn at radius 1: ceil((π / 2) / (2 acos(1 - 0.1))) = 2 pieces: the corner, both ends and one point between
-        ->and(count($round[2]))->toBe(8)
-        ->and(pairs($round[2])[0])->toBe([10.0, 0.0])
-        ->and(pairs($round[2])[3])->toBe([11.0, -0.0]);
+    // the end of each outside edge, where the miter had its tip
+    expect(pairs($bevel[0]))->toBe([[0.0, -1.0], [10.0, -1.0], [11.0, 0.0], [11.0, 10.0], [9.0, 10.0], [9.0, 1.0], [0.0, 1.0]])
+        // a quarter turn at radius 1: ceil((π / 2) / (2 acos(1 - 0.1))) = 2 pieces: both ends and one point between, on the circle
+        ->and(count(pairs($round[0])))->toBe(8)
+        ->and(pairs($round[0])[1])->toBe([10.0, -1.0])
+        ->and(pairs($round[0])[2])->toBe([10 + cos(-M_PI / 4), sin(-M_PI / 4)])
+        ->and(pairs($round[0])[3])->toBe([11.0, 0.0]);
 });
 
-it('adds no piece where the polyline runs straight on or straight back', function (array $points): void {
-    expect(count(RasterStroker::outline($points, 2.0, false)))->toBe(2);
-})->with([
-    'straight on' => [[[0, 0], [5, 0], [10, 0]]],
-    'straight back' => [[[0, 0], [10, 0], [5, 0]]],
-]);
+it('runs to the corner itself on the inside of a turn where a segment is too short to reach the crossing', function (): void {
+    // half-width 4: the inside edges would cross 4 back along each segment, and the second is 2 long
+    $short = pairs(RasterStroker::outline([[0, 0], [10, 0], [10, 2]], 8.0, false)[0]);
 
-it('closes a polyline with a join where it meets itself, and caps nothing', function (): void {
+    // back along the left: the end (6, 2), the start of that edge (6, 0), the corner (10, 0), the end of the first edge (10, 4), the start (0, 4)
+    expect(array_slice($short, 3))->toBe([[6.0, 2.0], [6.0, 0.0], [10.0, 0.0], [10.0, 4.0], [0.0, 4.0]]);
+});
+
+it('adds nothing at a point the polyline runs straight on through', function (): void {
+    // a point on each border, on the line its neighbours make
+    expect(pairs(RasterStroker::outline([[0, 0], [5, 0], [10, 0]], 2.0, false)[0]))
+        ->toBe([[0.0, -1.0], [5.0, -1.0], [10.0, -1.0], [10.0, 1.0], [5.0, 1.0], [0.0, 1.0]]);
+});
+
+it('goes across the end where the polyline runs straight back, and no further out', function (): void {
+    $contours = RasterStroker::outline([[0, 0], [10, 0], [5, 0]], 2.0, false);
+    $xs = array_column(pairs($contours[0]), 0);
+    $ys = array_column(pairs($contours[0]), 1);
+
+    expect(count($contours))->toBe(1)
+        ->and([min($xs), max($xs), min($ys), max($ys)])->toBe([0.0, 10.0, -1.0, 1.0]);
+});
+
+it('answers a closed polyline as its two borders, one each way round, and caps nothing', function (): void {
     $triangle = [[0, 0], [10, 0], [5, 8]];
+    $closed = RasterStroker::outline($triangle, 2.0, true);
 
-    // closed: three quads and three joins, whatever the cap; open: two quads and the one join between them
-    expect(count(RasterStroker::outline($triangle, 2.0, true)))->toBe(6)
-        ->and(count(RasterStroker::outline($triangle, 2.0, true, RASTER_CAP_ROUND)))->toBe(6)
-        ->and(count(RasterStroker::outline($triangle, 2.0, false)))->toBe(3);
+    // the border outside the triangle holds the one inside it, which turns the other way: what lies between is the stroke
+    expect(count($closed))->toBe(2)
+        ->and(area($closed[0]))->toBeGreaterThan(0.0)
+        ->and(area($closed[1]))->toBeLessThan(0.0)
+        ->and(area($closed[0]))->toBeGreaterThan(-area($closed[1]))
+        ->and(RasterStroker::outline($triangle, 2.0, true, RASTER_CAP_ROUND))->toBe($closed)
+        ->and(count(RasterStroker::outline($triangle, 2.0, false)))->toBe(1);
 });
 
 it('caps each end of an open polyline: nothing for a butt, a box for a square, a half circle for a round one', function (): void {
@@ -90,13 +114,16 @@ it('caps each end of an open polyline: nothing for a butt, a box for a square, a
     $square = RasterStroker::outline($line, 2.0, false, RASTER_CAP_SQUARE);
     $round = RasterStroker::outline($line, 2.0, false, RASTER_CAP_ROUND);
 
-    // a square cap is half the width long: the two boxes and the quad make up 12 by 2
-    expect(count($butt))->toBe(1)
-        ->and(count($square))->toBe(3)
-        ->and(array_sum(array_map('area', $square)))->toBe(2 * (12.0 * 2.0))
-        ->and(count($round))->toBe(3)
-        // a half circle of radius 1: ceil(π / 0.902) = 4 pieces, 5 points
-        ->and(count($round[1]))->toBe(10);
+    expect(pairs($butt[0]))->toBe([[0.0, -1.0], [10.0, -1.0], [10.0, 1.0], [0.0, 1.0]])
+        // a square cap is half the width long: the outline is 12 by 2
+        ->and(pairs($square[0]))->toBe([[0.0, -1.0], [10.0, -1.0], [11.0, -1.0], [11.0, 1.0], [10.0, 1.0], [0.0, 1.0], [-1.0, 1.0], [-1.0, -1.0]])
+        ->and(area($square[0]))->toBe(2 * (12.0 * 2.0))
+        // a half circle of radius 1 is ceil(π / 0.902) = 4 pieces: 3 points between the two borders, at each end
+        ->and(count($round))->toBe(1)
+        ->and(count(pairs($round[0])))->toBe(4 + 3 + 3)
+        // the middle one is straight out from the end
+        ->and(pairs($round[0])[3][0])->toBe(11.0)
+        ->and(abs(pairs($round[0])[3][1]))->toBeLessThan(1.0e-15);
 });
 
 it('draws a stroke with no length as a dot under a round cap and a square under a square one, none under a butt cap', function (): void {
@@ -111,22 +138,28 @@ it('draws a stroke with no length as a dot under a round cap and a square under 
         ->and(count($round))->toBe(1)
         ->and(count($round[0]))->toBe(16)
         ->and(pairs($round[0])[0])->toBe([4.0, 4.0])
-        // a 2 by 2 square on (3, 4), as it is made: not turned to positive area
-        ->and(pairs($square[0]))->toBe([[2.0, 5.0], [4.0, 5.0], [4.0, 3.0], [2.0, 3.0]])
+        // a 2 by 2 square on (3, 4), the same way round as an outline
+        ->and(pairs($square[0]))->toBe([[2.0, 3.0], [4.0, 3.0], [4.0, 5.0], [2.0, 5.0]])
+        ->and(area($square[0]))->toBe(8.0)
         // run along y instead of x: the same square, its corners in another order
-        ->and(pairs($turned[0]))->toBe([[2.0, 3.0], [2.0, 5.0], [4.0, 5.0], [4.0, 3.0]])
+        ->and(pairs($turned[0]))->toBe([[4.0, 3.0], [4.0, 5.0], [2.0, 5.0], [2.0, 3.0]])
+        ->and(area($round[0]))->toBeGreaterThan(0.0)
         // one point given once has no length to draw either
         ->and(RasterStroker::outline([[3, 4]], 2.0, false, RASTER_CAP_ROUND))->toBe([]);
 });
 
-it('turns every contour to positive area', function (int $seed): void {
+it('turns every stroke the same way round: one contour for an open polyline, two for a closed, and more inside than out', function (int $seed): void {
     mt_srand($seed);
     $points = array_map(fn (): array => [mt_rand(-500, 5000) / 100, mt_rand(-500, 5000) / 100], range(1, mt_rand(2, 12)));
     foreach ([RASTER_JOIN_MITER, RASTER_JOIN_ROUND, RASTER_JOIN_BEVEL] as $join) {
         foreach ([RASTER_CAP_BUTT, RASTER_CAP_ROUND, RASTER_CAP_SQUARE] as $cap) {
-            foreach (RasterStroker::outline($points, mt_rand(1, 80) / 10, (bool) mt_rand(0, 1), $cap, $join) as $contour) {
-                expect(area($contour))->toBeGreaterThan(0.0);
-            }
+            $closed = (bool) mt_rand(0, 1);
+            $contours = RasterStroker::outline($points, mt_rand(1, 80) / 10, $closed, $cap, $join);
+
+            // a closed polyline of two points is the one segment between them
+            expect(count($contours))->toBe($closed && count($points) > 2 ? 2 : 1)
+                // wound the same way round everywhere, the areas of a stroke's contours sum above 0
+                ->and(array_sum(array_map('area', $contours)))->toBeGreaterThan(0.0);
         }
     }
 })->with(range(1, 25));

@@ -32,8 +32,9 @@ it('exposes every constant, class and method the stubs declare', function (): vo
     $declared = stubDeclarations();
 
     expect($declared['constants'])->toHaveCount(19)
-        ->and(array_keys($declared['classes']))->toBe(['RasterScanner', 'RasterStroker'])
+        ->and(array_keys($declared['classes']))->toBe(['RasterScanner', 'RasterSpanStore', 'RasterStroker'])
         ->and($declared['classes']['RasterScanner'])->toHaveCount(13)
+        ->and($declared['classes']['RasterSpanStore'])->toBe(['__construct', 'antialias', 'add', 'remove', 'clear', 'count', 'size', 'fill'])
         ->and($declared['classes']['RasterStroker'])->toBe(['outline', 'dashed']);
 
     foreach ($declared['constants'] as $constant) {
@@ -56,6 +57,16 @@ it('declares a final class that cannot be cloned or serialized', function (): vo
     expect((new ReflectionClass(RasterScanner::class))->isFinal())->toBeTrue()
         ->and(fn () => clone $scanner)->toThrow(Error::class)
         ->and(fn () => serialize($scanner))->toThrow(Exception::class);
+});
+
+it('declares the span store final, not clonable or serializable, and refuses a second construction', function (): void {
+    $store = new RasterSpanStore(false);
+
+    expect((new ReflectionClass(RasterSpanStore::class))->isFinal())->toBeTrue()
+        ->and(fn () => clone $store)->toThrow(Error::class)
+        ->and(fn () => serialize($store))->toThrow(Exception::class)
+        ->and(fn () => $store->__construct(true))->toThrow(Error::class, 'already constructed')
+        ->and($store->antialias())->toBeFalse();
 });
 
 it('refuses a second construction', function (): void {

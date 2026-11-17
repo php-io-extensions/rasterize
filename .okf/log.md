@@ -31,3 +31,7 @@
 ## 2026-10-13
 
 * Version 0.10.5: `PHP_RASTERIZE_VERSION` and the version test move from 0.10.0. README rewritten to the php-io-extensions template.
+
+## 2026-11-17
+
+* `RasterSpanStore` (see [span store](api/span-store.md)): span lists scanned by `raster_path()` once and kept in C by number, painted many times at whole-pixel offsets, cut to a clip, through ext-fb's span sink. Topside's Lustrous C glyph driver keeps its glyphs here, so glyph coverage never becomes a PHP string. `phpraster_contours()` and `phpraster_free_contours()` are now shared from `RasterScanner.c` through `runtime.h`. 19 tests in `tests/SpanStoreTest.php` and the surface test; 161 passed on Homebrew PHP 8.4.27 NTS and ZTS (macOS arm64). Not yet built on Linux.

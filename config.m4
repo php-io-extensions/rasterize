@@ -9,7 +9,7 @@ if test "$PHP_RASTERIZE" != "no"; then
   dnl into one sincos call, whose last bit is not always the one sin() and cos() give alone: the
   dnl stroker's arcs would then differ from the same steps in PHP.
   PHP_NEW_EXTENSION([rasterize],
-    [src/rasterize.c src/core.c src/RasterScanner.c src/stroke.c src/RasterStroker.c],
+    [src/rasterize.c src/core.c src/RasterScanner.c src/stroke.c src/RasterStroker.c src/RasterSpanStore.c],
     [$ext_shared],, [-DZEND_ENABLE_STATIC_TSRMLS_CACHE=1 -ffp-contract=off -fno-builtin-sin -fno-builtin-cos])
   PHP_ADD_BUILD_DIR([$ext_builddir/src])
 fi

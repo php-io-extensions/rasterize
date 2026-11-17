@@ -50,38 +50,22 @@ static void record(stroker *s)
 	o->ends[o->count++] = o->length;
 }
 
-/* The contour begun at `start` is whole: keep it turned to positive area, or drop it when it has none. */
-static void seal(stroker *s, size_t start)
+/* The points from `start` to the end, turned to run the other way. */
+static void turn_back(stroker *s, size_t start)
 {
 	raster_outline *o = s->out;
 	size_t n = (o->length - start) / 2;
-	const double *f = o->v + start;
-	double sum = 0.0;
+	double *w = o->v + start;
 
-	for (size_t i = 0; i < n; i++) {
-		size_t j = (i + 1) % n;
+	for (size_t i = 0; i < n / 2; i++) {
+		size_t k = n - 1 - i;
+		double x = w[2 * i], y = w[2 * i + 1];
 
-		sum += f[2 * i] * f[2 * j + 1] - f[2 * j] * f[2 * i + 1];
+		w[2 * i] = w[2 * k];
+		w[2 * i + 1] = w[2 * k + 1];
+		w[2 * k] = x;
+		w[2 * k + 1] = y;
 	}
-	if (sum > 0) {
-		/* as it is */
-	} else if (sum < 0) {
-		double *w = o->v + start;
-
-		for (size_t i = 0; i < n / 2; i++) {
-			size_t k = n - 1 - i;
-			double x = w[2 * i], y = w[2 * i + 1];
-
-			w[2 * i] = w[2 * k];
-			w[2 * i + 1] = w[2 * k + 1];
-			w[2 * k] = x;
-			w[2 * k + 1] = y;
-		}
-	} else {
-		o->length = start;
-		return;
-	}
-	record(s);
 }
 
 /* How many straight pieces an arc of `sweep` radians at `radius` takes to stray less than the flatness: 2 at least. */
@@ -106,18 +90,17 @@ static long arc_steps(stroker *s, double sweep, double radius)
 /* A zero-length stroke: a circle the width across (round), or a square the width on a side turned to the direction (square). */
 static void dot(stroker *s, double x, double y, double half, int cap, const double direction[2])
 {
-	size_t start = s->out->length;
-
 	if (cap == RASTER_CAP_SQUARE) {
 		double ux = direction[0] * half;
 		double uy = direction[1] * half;
 		double nx = -uy;
 		double ny = ux;
 
-		put2(s, x - ux + nx, y - uy + ny);
-		put2(s, x + ux + nx, y + uy + ny);
-		put2(s, x + ux - nx, y + uy - ny);
+		/* the same way round as every outline, so a dot that overlaps another piece unites with it */
 		put2(s, x - ux - nx, y - uy - ny);
+		put2(s, x + ux - nx, y + uy - ny);
+		put2(s, x + ux + nx, y + uy + ny);
+		put2(s, x - ux + nx, y - uy + ny);
 	} else {
 		/* a multiple of four, so the four points straight out are vertices */
 		long steps = (long) (ceil((double) arc_steps(s, 2 * M_PI, half) / 4) * 4);
@@ -128,36 +111,76 @@ static void dot(stroker *s, double x, double y, double half, int cap, const doub
 			put2(s, x + half * cos(angle), y + half * sin(angle));
 		}
 	}
-	/* a dot is kept as it is made, whichever way it turns */
-	(void) start;
 	record(s);
 }
 
-/* The piece that fills the outside of a corner; nothing where the polyline runs straight on or straight back. */
-static void corner(stroker *s, double vx, double vy, const double in[2], const double out[2], double half, int join, double miter_limit)
+/*
+ * What one border does at a corner, from the edge coming in to the edge going out. On the outside of the turn that
+ * is the join. On the inside the two edges cross: where both segments are long enough to reach the crossing it is
+ * that one point, and where one is not, the border runs to the corner itself and out again.
+ *
+ * A point that lies on the straight line between its neighbours is left out: a miter is its tip alone.
+ * `side` is 1.0 for the side of the left normal (-y, x) and -1.0 for the other; `shorter` is the length of the
+ * shorter of the two segments.
+ */
+static void corner(stroker *s, double vx, double vy, const double in[2], const double out[2], double shorter, double side, double half, int join, double miter_limit)
 {
+	double ax = side * -in[1] * half;
+	double ay = side * in[0] * half;
+	double bx = side * -out[1] * half;
+	double by = side * out[0] * half;
 	double cross = in[0] * out[1] - in[1] * out[0];
-	double side, ax, ay, bx, by, mx, my, squared, reach;
-	size_t start;
+	double mx, my, squared, reach;
 
 	if (cross == 0.0) {
+		/* straight on: one point. Straight back: across the end, from this side of the way in to this side of the way out. */
+		put2(s, vx + ax, vy + ay);
+		if (!(in[0] * out[0] + in[1] * out[1] > 0)) {
+			put2(s, vx + bx, vy + by);
+		}
 		return;
 	}
+	/* The turn is toward the left normal when the cross product is positive: that side is the inside. */
+	if (side * cross > 0) {
+		if (half == 0.0) {
+			s->failed = 1;
+			return;
+		}
+		/*
+		 * Sum of the two unit normals on this side: its length is 2cos(θ/2), and the two edges' lines
+		 * cross 2·half / that length from the corner along it.
+		 */
+		mx = (ax + bx) / half;
+		my = (ay + by) / half;
+		squared = mx * mx + my * my;
+		if (squared > 0.0) {
+			/*
+			 * the crossing is half·tan(θ/2) back along each segment: within half of each, so two corners
+			 * on one segment never claim the same stretch of it
+			 */
+			double turn = 1 + in[0] * out[0] + in[1] * out[1];
 
-	/* The outside of the turn is the side away from it. */
-	side = cross > 0 ? -1.0 : 1.0;
-	ax = side * -in[1] * half;
-	ay = side * in[0] * half;
-	bx = side * -out[1] * half;
-	by = side * out[0] * half;
-	start = s->out->length;
+			if (turn == 0.0) {
+				s->failed = 1;
+				return;
+			}
+			if (half * fabs(cross) / turn <= shorter / 2) {
+				reach = 2 * half / squared;
+				put2(s, vx + mx * reach, vy + my * reach);
+				return;
+			}
+		}
+		put2(s, vx + ax, vy + ay);
+		put2(s, vx, vy);
+		put2(s, vx + bx, vy + by);
+		return;
+	}
 
 	if (join == RASTER_JOIN_ROUND) {
 		double from = atan2(ay, ax);
 		double sweep = atan2(by, bx) - from;
 		long steps;
 
-		put2(s, vx, vy);
 		put2(s, vx + ax, vy + ay);
 		while (sweep > M_PI) {
 			sweep -= 2 * M_PI;
@@ -172,14 +195,11 @@ static void corner(stroker *s, double vx, double vy, const double in[2], const d
 			put2(s, vx + half * cos(angle), vy + half * sin(angle));
 		}
 		put2(s, vx + bx, vy + by);
-		seal(s, start);
 		return;
 	}
 	if (join == RASTER_JOIN_BEVEL) {
-		put2(s, vx, vy);
 		put2(s, vx + ax, vy + ay);
 		put2(s, vx + bx, vy + by);
-		seal(s, start);
 		return;
 	}
 
@@ -195,10 +215,8 @@ static void corner(stroker *s, double vx, double vy, const double in[2], const d
 	my = (ay + by) / half;
 	squared = mx * mx + my * my;
 	if (squared * miter_limit * miter_limit < 4.0) {
-		put2(s, vx, vy);
 		put2(s, vx + ax, vy + ay);
 		put2(s, vx + bx, vy + by);
-		seal(s, start);
 		return;
 	}
 	if (squared == 0.0) {
@@ -206,43 +224,73 @@ static void corner(stroker *s, double vx, double vy, const double in[2], const d
 		return;
 	}
 	reach = 2 * half / squared;
-	put2(s, vx, vy);
-	put2(s, vx + ax, vy + ay);
+	/* the tip alone: the ends of the two edges lie on the lines into it */
 	put2(s, vx + mx * reach, vy + my * reach);
-	put2(s, vx + bx, vy + by);
-	seal(s, start);
 }
 
-/* The cap at an end of an open polyline; `outward` is the unit direction pointing away from the polyline, out of this end. */
+/*
+ * One border of the stroke: the polyline moved `half` to one side, in the order the polyline runs, with what each
+ * corner takes on that side.
+ */
+static void border(stroker *s, const double *p, size_t n, const double *dirs, const double *lengths, size_t segments, int closed, double side, double half, int join, double miter_limit)
+{
+	const double *last;
+
+	if (closed) {
+		for (size_t j = 0; j < n && !s->failed; j++) {
+			size_t before = (j + segments - 1) % segments;
+			double shorter = lengths[before] < lengths[j] ? lengths[before] : lengths[j];
+
+			corner(s, p[2 * j], p[2 * j + 1], dirs + 2 * before, dirs + 2 * j, shorter, side, half, join, miter_limit);
+		}
+		return;
+	}
+
+	put2(s, p[0] + side * -dirs[1] * half, p[1] + side * dirs[0] * half);
+	for (size_t j = 1; j + 1 < n && !s->failed; j++) {
+		double shorter = lengths[j - 1] < lengths[j] ? lengths[j - 1] : lengths[j];
+
+		corner(s, p[2 * j], p[2 * j + 1], dirs + 2 * (j - 1), dirs + 2 * j, shorter, side, half, join, miter_limit);
+	}
+	last = dirs + 2 * (segments - 1);
+	put2(s, p[2 * (n - 1)] + side * -last[1] * half, p[2 * (n - 1) + 1] + side * last[0] * half);
+}
+
+/*
+ * What the outline takes round an end of an open polyline, between its two borders: from the border on the right
+ * of the outward direction to the one on its left. The two border points themselves are the borders'. A butt cap
+ * is the straight line between them: nothing. `outward` is the unit direction pointing away from the polyline.
+ */
 static void cap_at(stroker *s, double x, double y, const double outward[2], double half, int cap)
 {
 	/* the normal on the left of the outward direction */
-	double nx = -outward[1] * half;
-	double ny = outward[0] * half;
-	size_t start = s->out->length;
+	double nx, ny;
+
+	if (cap == RASTER_CAP_BUTT) {
+		return;
+	}
+	nx = -outward[1] * half;
+	ny = outward[0] * half;
 
 	if (cap == RASTER_CAP_SQUARE) {
 		double ox = outward[0] * half;
 		double oy = outward[1] * half;
 
-		put2(s, x + nx, y + ny);
-		put2(s, x + nx + ox, y + ny + oy);
 		put2(s, x - nx + ox, y - ny + oy);
-		put2(s, x - nx, y - ny);
+		put2(s, x + nx + ox, y + ny + oy);
 	} else {
-		/* a half circle from the left normal, through the outward direction, to the right normal */
-		double from = atan2(ny, nx);
+		/* a half circle from the right normal, through the outward direction, to the left normal */
+		double from = atan2(-ny, -nx);
 		/* an even count, so the point straight out from the end is one of the vertices */
 		long steps = arc_steps(s, M_PI, half);
 
 		steps += steps % 2;
-		for (long i = 0; i <= steps; i++) {
-			double angle = from - M_PI * (double) i / (double) steps;
+		for (long i = 1; i < steps; i++) {
+			double angle = from + M_PI * (double) i / (double) steps;
 
 			put2(s, x + half * cos(angle), y + half * sin(angle));
 		}
 	}
-	seal(s, start);
 }
 
 int raster_stroke_outline(const raster_memory *memory, const double *points, size_t count, double stroke, int closed, int cap, int join, double miter_limit, const double *direction, raster_outline *out)
@@ -251,6 +299,7 @@ int raster_stroke_outline(const raster_memory *memory, const double *points, siz
 	double half;
 	double *p;
 	double *dirs;
+	double *lengths;
 	size_t n = 0, segments;
 
 	memset(out, 0, sizeof(*out));
@@ -289,48 +338,47 @@ int raster_stroke_outline(const raster_memory *memory, const double *points, siz
 	closed = closed && n > 2;
 	segments = closed ? n : n - 1;
 	dirs = memory->grow(NULL, segments * 2 * sizeof(double));
+	lengths = memory->grow(NULL, segments * sizeof(double));
 
 	for (size_t i = 0; i < segments; i++) {
 		double ax = p[2 * i], ay = p[2 * i + 1];
 		double bx = p[2 * ((i + 1) % n)], by = p[2 * ((i + 1) % n) + 1];
 		double length = sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
-		double ux, uy, nx, ny;
-		size_t start = out->length;
 
 		if (length == 0.0) {
 			s.failed = 1;
 			break;
 		}
-		ux = (bx - ax) / length;
-		uy = (by - ay) / length;
-		dirs[2 * i] = ux;
-		dirs[2 * i + 1] = uy;
-		nx = -uy * half;
-		ny = ux * half;
-		put2(&s, ax + nx, ay + ny);
-		put2(&s, bx + nx, by + ny);
-		put2(&s, bx - nx, by - ny);
-		put2(&s, ax - nx, ay - ny);
-		seal(&s, start);
+		dirs[2 * i] = (bx - ax) / length;
+		dirs[2 * i + 1] = (by - ay) / length;
+		lengths[i] = length;
 	}
 
-	if (!s.failed) {
-		size_t joins = closed ? segments : segments - 1;
+	if (!s.failed && closed) {
+		/* the two borders, one each way round: what lies between them is filled */
+		size_t left;
 
-		for (size_t j = 0; j < joins && !s.failed; j++) {
-			size_t at = (j + 1) % n, next = (j + 1) % segments;
-
-			corner(&s, p[2 * at], p[2 * at + 1], dirs + 2 * j, dirs + 2 * next, half, join, miter_limit);
-		}
-	}
-
-	if (!s.failed && !closed && cap != RASTER_CAP_BUTT) {
+		border(&s, p, n, dirs, lengths, segments, 1, -1.0, half, join, miter_limit);
+		record(&s);
+		left = out->length;
+		border(&s, p, n, dirs, lengths, segments, 1, 1.0, half, join, miter_limit);
+		turn_back(&s, left);
+		record(&s);
+	} else if (!s.failed) {
+		/* out along the right, round the far end, back along the left, round the start */
 		double back[2] = {-dirs[0], -dirs[1]};
+		size_t left;
 
-		cap_at(&s, p[0], p[1], back, half, cap);
+		border(&s, p, n, dirs, lengths, segments, 0, -1.0, half, join, miter_limit);
 		cap_at(&s, p[2 * (n - 1)], p[2 * (n - 1) + 1], dirs + 2 * (segments - 1), half, cap);
+		left = out->length;
+		border(&s, p, n, dirs, lengths, segments, 0, 1.0, half, join, miter_limit);
+		turn_back(&s, left);
+		cap_at(&s, p[0], p[1], back, half, cap);
+		record(&s);
 	}
 
+	memory->release(lengths);
 	memory->release(dirs);
 	memory->release(p);
 	if (s.failed) {

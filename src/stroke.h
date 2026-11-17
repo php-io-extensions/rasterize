@@ -3,11 +3,16 @@
  * its stroke, and a polyline cut into the pieces a dash pattern leaves. Plain
  * C; nothing here knows PHP.
  *
- * outline(): a quad a segment; at each corner the join (a miter, cut to a
- * bevel where its tip would sit more than the miter limit of half-strokes from
- * the corner; a bevel; or a round arc); at the ends of an open polyline the cap
- * (butt, square or round). Every contour is turned to positive signed area, so
- * pieces that overlap unite instead of cancelling; one of no area is dropped.
+ * outline(): an open polyline is one contour: out along one side, round the cap
+ * at the far end (butt, square or round), back along the other side, round the
+ * cap at the start. A closed one is two: its two borders, one each way round.
+ * At each corner the side on the outside of the turn takes the join (a miter,
+ * cut to a bevel where its tip would sit more than the miter limit of
+ * half-strokes from the corner; a bevel; or a round arc); the side on the inside
+ * is the point where its two edges cross, or, where a segment is too short to
+ * reach it, the corner itself between the two edges' ends. Every contour runs
+ * the same way round its stroke, so strokes that overlap unite instead of
+ * cancelling.
  *
  * The arithmetic is IEEE double with + - * /, sqrt, floor, ceil, hypot, fmod,
  * atan2, acos, sin and cos, in a fixed order, built with -ffp-contract=off and

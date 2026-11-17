@@ -1,6 +1,7 @@
 /*
  * rasterize: shapes into coverage spans in C. RasterScanner answers the span
- * bytes of paths, ellipses, rings and one-pixel polylines inside a clip.
+ * bytes of paths, ellipses, rings and one-pixel polylines inside a clip;
+ * RasterSpanStore keeps span lists in C and paints them, moved, into ext-fb.
  */
 
 #include "runtime.h"
@@ -30,6 +31,7 @@ PHP_MINIT_FUNCTION(rasterize)
 
 	phpraster_register_RasterScanner();
 	phpraster_register_RasterStroker();
+	phpraster_register_RasterSpanStore();
 	phpraster_find_sink();
 
 	return SUCCESS;

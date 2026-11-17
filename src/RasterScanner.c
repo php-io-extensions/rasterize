@@ -102,7 +102,7 @@ static bool phpraster_flat(zval *list, const char *what, double **out, size_t *p
 	return true;
 }
 
-static void phpraster_free_contours(raster_contour *contours, uint32_t made)
+void phpraster_free_contours(raster_contour *contours, uint32_t made)
 {
 	for (uint32_t i = 0; i < made; i++) {
 		efree((void *) contours[i].points);
@@ -111,7 +111,7 @@ static void phpraster_free_contours(raster_contour *contours, uint32_t made)
 }
 
 /* A list of flat x, y… contours into `*out` (emalloc'd, `*made` of them); false with a ValueError, nothing left allocated. */
-static bool phpraster_contours(HashTable *list, raster_contour **out, uint32_t *made)
+bool phpraster_contours(HashTable *list, raster_contour **out, uint32_t *made)
 {
 	uint32_t count = zend_hash_num_elements(list);
 	zval *entry;

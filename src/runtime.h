@@ -34,4 +34,13 @@ extern zend_class_entry *phpraster_ce_RasterStroker;
 
 void phpraster_register_RasterStroker(void);
 
+extern zend_class_entry *phpraster_ce_RasterSpanStore;
+
+void phpraster_register_RasterSpanStore(void);
+
+/* A list of flat x, y… contours into `*out` (emalloc'd, `*made` of them); false with a ValueError, nothing left allocated. */
+bool phpraster_contours(HashTable *list, raster_contour **out, uint32_t *made);
+
+void phpraster_free_contours(raster_contour *contours, uint32_t made);
+
 #endif
